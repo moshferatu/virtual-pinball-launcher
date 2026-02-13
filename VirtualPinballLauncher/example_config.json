@@ -1,0 +1,8 @@
+{
+  "TablesDirectory": "D:\\Pinball\\Tables",
+  "VideosDirectory": "D:\\Pinball\\Videos",
+  "VpxExePath": "C:\\Visual Pinball\\VPinballX64.exe",
+  "VideoExtension": ".mp4",
+  "RecordSeconds": 30,
+  "FfmpegPath": "ffmpeg"
+}
