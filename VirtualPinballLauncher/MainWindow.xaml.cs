@@ -1,6 +1,7 @@
 using LibVLCSharp.Shared;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -8,17 +9,24 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using MessageBox = System.Windows.MessageBox;
+using Cursors = System.Windows.Input.Cursors;
 
 namespace VirtualPinballLauncher;
 
 public partial class MainWindow : Window
 {
+    private const string TableStatsCsvFileName = "table-stats.csv";
+    private const string TableStatsHeader = "Table Name,Times Played,Total Time Spent Playing,Last Date Played";
+    private const string LastDateFormat = "MMMM d, yyyy";
+
     private Config config = null!;
     private List<TableItem> tableList = new();
     private int tableIndex = 0;
 
     private LibVLC vlcPlayer = null!;
     private MediaPlayer mediaPlayer = null!;
+    private DmdWindow? dmdWindow;
 
     [DllImport("user32.dll")]
     private static extern int ShowCursor(bool bShow);
@@ -38,6 +46,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Closed += (_, __) => dmdWindow?.Close();
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -45,7 +54,7 @@ public partial class MainWindow : Window
         try
         {
             vlcPlayer = new LibVLC("--no-video-title-show");
-            mediaPlayer = new MediaPlayer(vlcPlayer);   
+            mediaPlayer = new MediaPlayer(vlcPlayer);
         }
         catch (Exception ex)
         {
@@ -63,6 +72,8 @@ public partial class MainWindow : Window
         ForceHideCursor();
         Activated += (_, __) => ForceHideCursor();
 
+        EnsureDmdWindow();
+
         Focus();
 
         try
@@ -73,6 +84,7 @@ public partial class MainWindow : Window
             if (tableList.Count == 0)
             {
                 TableNameText.Text = "No VPX tables found. Check config.json TablesDirectory.";
+                dmdWindow?.ShowTableProperties("No Table Selected", "");
                 return;
             }
 
@@ -86,6 +98,17 @@ public partial class MainWindow : Window
         }
     }
 
+    private void EnsureDmdWindow()
+    {
+        if (dmdWindow != null)
+            return;
+
+        dmdWindow = new DmdWindow();
+        // dmdWindow.MoveToPreferredMonitor(1); // third monitor (0-based)
+        dmdWindow.MoveToRightmostMonitor();
+        dmdWindow.Show();
+    }
+
     private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (tableList.Count == 0) return;
@@ -94,7 +117,7 @@ public partial class MainWindow : Window
         else Prev();
     }
 
-    private void Window_KeyDown(object sender, KeyEventArgs e)
+    private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (tableList.Count == 0)
         {
@@ -150,6 +173,11 @@ public partial class MainWindow : Window
         var table = tableList[tableIndex];
         TableNameText.Text = table.DisplayName;
 
+        var statsCsvPath = GetTableStatsCsvPath();
+        var allStats = LoadOrCreateTableStats(statsCsvPath);
+        var tableStats = FindTableStats(allStats, table.DisplayName) ?? new TableStatsEntry(table.DisplayName);
+        dmdWindow?.ShowTableProperties(table.DisplayName, FormatTableStatsForDisplay(tableStats));
+
         if (!string.IsNullOrWhiteSpace(table.PreviewVideoPath) && File.Exists(table.PreviewVideoPath))
         {
             try
@@ -165,6 +193,209 @@ public partial class MainWindow : Window
         {
             mediaPlayer.Stop();
         }
+    }
+
+    private string GetTableStatsCsvPath()
+    {
+        var baseDirectory = string.IsNullOrWhiteSpace(config.TablesDirectory)
+            ? AppContext.BaseDirectory
+            : config.TablesDirectory;
+
+        return Path.Combine(baseDirectory, TableStatsCsvFileName);
+    }
+
+    private static List<TableStatsEntry> LoadOrCreateTableStats(string csvPath)
+    {
+        if (!File.Exists(csvPath))
+        {
+            SaveTableStats(csvPath, new List<TableStatsEntry>());
+            return new List<TableStatsEntry>();
+        }
+
+        var tableStats = new List<TableStatsEntry>();
+        var firstNonEmptyLineFound = false;
+
+        foreach (var line in File.ReadLines(csvPath))
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            if (!firstNonEmptyLineFound)
+            {
+                firstNonEmptyLineFound = true;
+                if (string.Equals(line.Trim(), TableStatsHeader, StringComparison.OrdinalIgnoreCase))
+                    continue;
+            }
+
+            var fields = ParseCsvLine(line);
+            if (fields.Count != 4)
+                continue;
+
+            var tableName = fields[0].Trim();
+            if (string.IsNullOrWhiteSpace(tableName))
+                continue;
+
+            var timesPlayed = 0;
+            if (int.TryParse(fields[1], out var parsedTimesPlayed) && parsedTimesPlayed >= 0)
+                timesPlayed = parsedTimesPlayed;
+
+            var totalPlayTime = TimeSpan.Zero;
+            if (TimeSpan.TryParse(fields[2], CultureInfo.InvariantCulture, out var parsedPlayTime) && parsedPlayTime >= TimeSpan.Zero)
+                totalPlayTime = parsedPlayTime;
+
+            DateTime? lastDatePlayed = null;
+            if (DateTime.TryParseExact(fields[3], LastDateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedLastDate))
+                lastDatePlayed = parsedLastDate;
+
+            tableStats.Add(new TableStatsEntry(tableName)
+            {
+                TimesPlayed = timesPlayed,
+                TotalTimeSpentPlaying = totalPlayTime,
+                LastDatePlayed = lastDatePlayed
+            });
+        }
+
+        return tableStats;
+    }
+
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inQuotes = false;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (c == '"')
+            {
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+                continue;
+            }
+
+            if (c == ',' && !inQuotes)
+            {
+                fields.Add(current.ToString());
+                current.Clear();
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        fields.Add(current.ToString());
+        return fields;
+    }
+
+    private static void SaveTableStats(string csvPath, List<TableStatsEntry> tableStats)
+    {
+        var lines = new List<string> { TableStatsHeader };
+
+        foreach (var stats in tableStats.OrderBy(s => s.TableName, StringComparer.OrdinalIgnoreCase))
+        {
+            var lastDate = stats.LastDatePlayed.HasValue
+                ? stats.LastDatePlayed.Value.ToString(LastDateFormat, CultureInfo.InvariantCulture)
+                : string.Empty;
+
+            lines.Add(string.Join(",",
+                EscapeCsvValue(stats.TableName),
+                stats.TimesPlayed.ToString(CultureInfo.InvariantCulture),
+                EscapeCsvValue(stats.TotalTimeSpentPlaying.ToString("c", CultureInfo.InvariantCulture)),
+                EscapeCsvValue(lastDate)));
+        }
+
+        File.WriteAllLines(csvPath, lines);
+    }
+
+    private static string EscapeCsvValue(string value)
+    {
+        if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r'))
+            return value;
+
+        return $"\"{value.Replace("\"", "\"\"")}\"";
+    }
+
+    private static TableStatsEntry? FindTableStats(List<TableStatsEntry> tableStats, string tableName)
+    {
+        return tableStats.FirstOrDefault(s => string.Equals(s.TableName, tableName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string FormatTableStatsForDisplay(TableStatsEntry tableStats)
+    {
+        var lastPlayedText = tableStats.LastDatePlayed.HasValue
+            ? tableStats.LastDatePlayed.Value.ToString(LastDateFormat, CultureInfo.InvariantCulture)
+            : "Never";
+
+        return string.Join(Environment.NewLine, new[]
+        {
+            $"Times Played: {tableStats.TimesPlayed}",
+            $"Total Time Played: {FormatDuration(tableStats.TotalTimeSpentPlaying)}",
+            $"Last Played: {lastPlayedText}"
+        });
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        var totalHours = (int)Math.Floor(duration.TotalHours);
+        var totalMinutes = duration.Minutes;
+
+        if (totalHours == 0 && totalMinutes == 0)
+            return "0 minutes";
+
+        if (totalHours == 0)
+            return totalMinutes == 1
+                ? "1 minute"
+                : $"{totalMinutes} minutes";
+
+        if (totalMinutes == 0)
+            return totalHours == 1
+                ? "1 hour"
+                : $"{totalHours} hours";
+
+        var hoursText = totalHours == 1 ? "1 hour" : $"{totalHours} hours";
+        var minutesText = totalMinutes == 1 ? "1 minute" : $"{totalMinutes} minutes";
+
+        return $"{hoursText} {minutesText}";
+    }
+
+    private void UpdateTableStatsAfterPlay(string tableName, TimeSpan elapsedPlayTime)
+    {
+        var statsCsvPath = GetTableStatsCsvPath();
+        var allStats = LoadOrCreateTableStats(statsCsvPath);
+        var tableStats = FindTableStats(allStats, tableName);
+
+        if (tableStats is null)
+        {
+            tableStats = new TableStatsEntry(tableName);
+            allStats.Add(tableStats);
+        }
+
+        tableStats.TimesPlayed += 1;
+        tableStats.TotalTimeSpentPlaying += elapsedPlayTime;
+        tableStats.LastDatePlayed = DateTime.Today;
+
+        SaveTableStats(statsCsvPath, allStats);
+    }
+
+    private sealed class TableStatsEntry
+    {
+        public TableStatsEntry(string tableName)
+        {
+            TableName = tableName;
+        }
+
+        public string TableName { get; }
+        public int TimesPlayed { get; set; }
+        public TimeSpan TotalTimeSpentPlaying { get; set; }
+        public DateTime? LastDatePlayed { get; set; }
     }
 
     private void PlayPreview(string path)
@@ -183,7 +414,7 @@ public partial class MainWindow : Window
         // Don't block the media player thread.
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            Dispatcher.BeginInvoke(() => 
+            Dispatcher.BeginInvoke(() =>
             {
                 var table = tableList[tableIndex];
                 if (!string.IsNullOrWhiteSpace(table.PreviewVideoPath) && File.Exists(table.PreviewVideoPath))
@@ -233,18 +464,41 @@ public partial class MainWindow : Window
         {
             SetLoading(true);
 
+            var stopwatch = Stopwatch.StartNew();
             var proc = Process.Start(psi);
 
             if (proc != null)
             {
                 Topmost = false;
+                if (dmdWindow != null)
+                {
+                    dmdWindow.Topmost = false;
+                    dmdWindow.WindowState = WindowState.Minimized;
+                }
                 proc.EnableRaisingEvents = true;
                 proc.Exited += (_, __) =>
                 {
                     Dispatcher.Invoke(() =>
                     {
+                        stopwatch.Stop();
+
+                        try
+                        {
+                            UpdateTableStatsAfterPlay(table.DisplayName, stopwatch.Elapsed);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(ex.ToString(), "CSV Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+
                         SetLoading(false);
                         WindowState = WindowState.Maximized;
+                        if (dmdWindow != null)
+                        {
+                            dmdWindow.WindowState = WindowState.Maximized;
+                        }
+                        dmdWindow?.ShowTableProperties(table.DisplayName, FormatTableStatsForDisplay(
+                            FindTableStats(LoadOrCreateTableStats(GetTableStatsCsvPath()), table.DisplayName) ?? new TableStatsEntry(table.DisplayName)));
                         Activate();
                         Topmost = true;
                     });
@@ -272,7 +526,7 @@ public partial class MainWindow : Window
         }
 
         try
-        {   
+        {
             // Kick off record mode in a separate process to not block UI.
             var psi = new ProcessStartInfo
             {
