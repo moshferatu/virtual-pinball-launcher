@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private LibVLC vlcPlayer = null!;
     private MediaPlayer mediaPlayer = null!;
     private DmdWindow? dmdWindow;
+    private BackglassWindow? backglassWindow;
 
     [DllImport("user32.dll")]
     private static extern int ShowCursor(bool bShow);
@@ -46,7 +47,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Closed += (_, __) => dmdWindow?.Close();
+        Closed += (_, __) =>
+        {
+            dmdWindow?.Close();
+            backglassWindow?.Close();
+        };
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -73,6 +78,7 @@ public partial class MainWindow : Window
         Activated += (_, __) => ForceHideCursor();
 
         EnsureDmdWindow();
+        EnsureBackglassWindow();
 
         Focus();
 
@@ -104,9 +110,18 @@ public partial class MainWindow : Window
             return;
 
         dmdWindow = new DmdWindow();
-        // dmdWindow.MoveToPreferredMonitor(1); // third monitor (0-based)
         dmdWindow.MoveToRightmostMonitor();
         dmdWindow.Show();
+    }
+
+    private void EnsureBackglassWindow()
+    {
+        if (backglassWindow != null)
+            return;
+
+        backglassWindow = new BackglassWindow();
+        backglassWindow.MoveToSecondRightmostMonitor();
+        backglassWindow.Show();
     }
 
     private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -192,6 +207,15 @@ public partial class MainWindow : Window
         else
         {
             mediaPlayer.Stop();
+        }
+
+        if (!string.IsNullOrWhiteSpace(table.BackglassVideoPath) && File.Exists(table.BackglassVideoPath))
+        {
+            backglassWindow?.PlayVideo(table.BackglassVideoPath);
+        }
+        else
+        {
+            backglassWindow?.StopVideo();
         }
     }
 
@@ -475,6 +499,11 @@ public partial class MainWindow : Window
                     dmdWindow.Topmost = false;
                     dmdWindow.WindowState = WindowState.Minimized;
                 }
+                if (backglassWindow != null)
+                {
+                    backglassWindow.Topmost = false;
+                    backglassWindow.SetLoading(true);
+                }
                 proc.EnableRaisingEvents = true;
                 proc.Exited += (_, __) =>
                 {
@@ -497,8 +526,14 @@ public partial class MainWindow : Window
                         {
                             dmdWindow.WindowState = WindowState.Maximized;
                         }
+                        if (backglassWindow != null)
+                        {
+                            backglassWindow.SetLoading(false);
+                            backglassWindow.Topmost = true;
+                        }
                         dmdWindow?.ShowTableProperties(table.DisplayName, FormatTableStatsForDisplay(
                             FindTableStats(LoadOrCreateTableStats(GetTableStatsCsvPath()), table.DisplayName) ?? new TableStatsEntry(table.DisplayName)));
+                        ShowCurrent();
                         Activate();
                         Topmost = true;
                     });
@@ -527,37 +562,53 @@ public partial class MainWindow : Window
 
         try
         {
-            // Kick off record mode in a separate process to not block UI.
-            var psi = new ProcessStartInfo
-            {
-                FileName = self,
-                Arguments = $"--record \"{table.VpxPath}\"",
-                UseShellExecute = false
-            };
-            var proc = Process.Start(psi);
+            Topmost = false;
 
-            if (proc != null)
-            {
-                Topmost = false;
-                WindowState = WindowState.Minimized;
-                proc.EnableRaisingEvents = true;
-                proc.Exited += (_, __) =>
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        WindowState = WindowState.Maximized;
-                        Activate();
-                        Topmost = true;
-                        ShowCurrent();
-                    });
-                };
-            }
+            if (backglassWindow != null)
+                backglassWindow.Topmost = false;
+
+            // 1) Record playfield video.
+            await RunRecordProcessAsync(self, $"--record \"{table.VpxPath}\"");
+
+            // 2) Record backglass video.
+            if (!string.IsNullOrWhiteSpace(config.BackglassVideosDirectory))
+                await RunRecordProcessAsync(self, $"--record-backglass \"{table.VpxPath}\"");
+
+            WindowState = WindowState.Maximized;
+            Activate();
+            Topmost = true;
+            if (backglassWindow != null)
+                backglassWindow.Topmost = true;
+
+            ShowCurrent();
         }
         catch (Exception ex)
         {
+            WindowState = WindowState.Maximized;
+            Activate();
+            Topmost = true;
             MessageBox.Show(ex.ToString(), "Record Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
 
-        await Task.CompletedTask;
+    private static Task RunRecordProcessAsync(string exePath, string arguments)
+    {
+        var tcs = new TaskCompletionSource();
+        var proc = Process.Start(new ProcessStartInfo
+        {
+            FileName = exePath,
+            Arguments = arguments,
+            UseShellExecute = false
+        });
+
+        if (proc is null)
+        {
+            tcs.SetResult();
+            return tcs.Task;
+        }
+
+        proc.EnableRaisingEvents = true;
+        proc.Exited += (_, _) => tcs.SetResult();
+        return tcs.Task;
     }
 }
