@@ -11,6 +11,7 @@ public sealed class Config
 
     public string TablesDirectory { get; set; } = "";
     public string VideosDirectory { get; set; } = "";
+    public string BackglassVideosDirectory { get; set; } = "";
     public string VpxExePath { get; set; } = @"";
     public string VideoExtension { get; set; } = ".mp4";
     public int RecordSeconds { get; set; } = 30;
