@@ -74,4 +74,74 @@ public static class Recorder
         // It can sometimes be left open after killing VPX.
         // This only applies to tables with PuP packs.
     }
+
+    public static async Task RecordBackglassPreviewAsync(Config config, string vpxPath)
+    {
+        if (!File.Exists(config.VpxExePath))
+            throw new FileNotFoundException("VPX executable not found.", config.VpxExePath);
+
+        if (!File.Exists(vpxPath))
+            throw new FileNotFoundException("VPX table not found.", vpxPath);
+
+        if (string.IsNullOrWhiteSpace(config.BackglassVideosDirectory))
+            throw new ArgumentException("BackglassVideosDirectory is not set in config.json.", nameof(config.BackglassVideosDirectory));
+
+        var bounds = ScreenSize.GetBackglassMonitorBounds();
+        if (bounds is null)
+            throw new InvalidOperationException("No backglass monitor could be detected.");
+
+        Directory.CreateDirectory(config.BackglassVideosDirectory);
+
+        // 1) Launch the VPX table.
+        var vpx = Process.Start(new ProcessStartInfo
+        {
+            FileName = config.VpxExePath,
+            Arguments = $"/play -\"{vpxPath}\" /minimized",
+            UseShellExecute = false,
+            WorkingDirectory = Path.GetDirectoryName(config.VpxExePath) ?? Environment.CurrentDirectory
+        });
+
+        // Give the table time to come to the foreground.
+        await Task.Delay(TimeSpan.FromSeconds(10));
+
+        if (vpx == null)
+            throw new Exception("Failed to start VPX process.");
+
+        // 2) Record the backglass monitor.
+        var rect = bounds.Value;
+        int video_width  = rect.Width;
+        int video_height = rect.Height;
+        int video_length = config.RecordSeconds;
+
+        var tableName = Path.GetFileNameWithoutExtension(vpxPath);
+        var video_file = Path.Combine(config.BackglassVideosDirectory, tableName +
+            (string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension));
+        if (File.Exists(video_file))
+            File.Delete(video_file);
+
+        var ffmpeg_arguments =
+            $"-y -f gdigrab -framerate 30 " +
+            $"-offset_x {rect.Left} -offset_y {rect.Top} " +
+            $"-video_size {video_width}x{video_height} " +
+            $"-i desktop -t {video_length} " +
+            $"-vf \"scale=in_range=pc:out_range=tv\" " +
+            $"-c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p " +
+            $"-colorspace bt709 -color_primaries bt709 -color_trc bt709 " +
+            $"\"{video_file}\"";
+
+        var ffmpeg = Process.Start(new ProcessStartInfo
+        {
+            FileName = config.FfmpegPath,
+            Arguments = ffmpeg_arguments,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        if (ffmpeg == null)
+            throw new Exception("Failed to start ffmpeg process. Check FfmpegPath in config.json.");
+
+        await ffmpeg.WaitForExitAsync();
+
+        vpx.Kill();
+    }
 }
