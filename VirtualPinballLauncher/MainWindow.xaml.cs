@@ -90,7 +90,7 @@ public partial class MainWindow : Window
 
         navigationTimer = new System.Windows.Threading.DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(50)
+            Interval = TimeSpan.FromMilliseconds(100)
         };
         navigationTimer.Tick += NavigationTimer_Tick;
 
@@ -198,7 +198,7 @@ public partial class MainWindow : Window
             case Key.LeftShift:
             case Key.PageUp:
                 navigationTimer?.Stop();
-                ShowCurrentFull();
+                navigationTimer?.Start();
                 break;
         }
     }
