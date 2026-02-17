@@ -1,4 +1,7 @@
+using System.Drawing;
+using System.Linq;
 using System.Runtime.InteropServices;
+using Forms = System.Windows.Forms;
 
 namespace VirtualPinballLauncher;
 
@@ -13,4 +16,15 @@ static class ScreenSize
 
     public static int PlayfieldWidth  => GetSystemMetrics(SM_CXSCREEN);
     public static int PlayfieldHeight => GetSystemMetrics(SM_CYSCREEN);
+
+    public static Rectangle? GetBackglassMonitorBounds()
+    {
+        var sorted = Forms.Screen.AllScreens
+            .OrderByDescending(s => s.Bounds.Left)
+            .ThenBy(s => s.Bounds.Width * s.Bounds.Height)
+            .ToArray();
+
+        var screen = sorted.Length >= 2 ? sorted[1] : sorted.FirstOrDefault();
+        return screen?.Bounds;
+    }
 }
