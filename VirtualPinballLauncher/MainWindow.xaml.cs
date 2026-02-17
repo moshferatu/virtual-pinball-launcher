@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -33,6 +34,11 @@ public partial class MainWindow : Window
     private static extern int ShowCursor(bool bShow);
 
     private bool cursorHidden;
+
+    private System.Windows.Threading.DispatcherTimer? navigationTimer;
+    private long navigationGeneration;
+    private List<TableStatsEntry>? cachedTableStats;
+    private string? cachedTableStatsCsvPath;
 
     private void ForceHideCursor()
     {
@@ -82,6 +88,12 @@ public partial class MainWindow : Window
 
         Focus();
 
+        navigationTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(50)
+        };
+        navigationTimer.Tick += NavigationTimer_Tick;
+
         try
         {
             config = await Config.LoadAsync(Config.DefaultPath);
@@ -95,7 +107,7 @@ public partial class MainWindow : Window
             }
 
             tableIndex = 0;
-            ShowCurrent();
+            ShowCurrentFull();
         }
         catch (Exception ex)
         {
@@ -171,6 +183,26 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Window_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (tableList.Count == 0) return;
+
+        switch (e.Key)
+        {
+            case Key.Down:
+            case Key.Right:
+            case Key.RightShift:
+            case Key.PageDown:
+            case Key.Up:
+            case Key.Left:
+            case Key.LeftShift:
+            case Key.PageUp:
+                navigationTimer?.Stop();
+                ShowCurrentFull();
+                break;
+        }
+    }
+
     private void Next()
     {
         tableIndex = (tableIndex + 1) % tableList.Count;
@@ -188,10 +220,29 @@ public partial class MainWindow : Window
         var table = tableList[tableIndex];
         TableNameText.Text = table.DisplayName;
 
+        Interlocked.Increment(ref navigationGeneration);
+
+        if (navigationTimer != null)
+        {
+            navigationTimer.Stop();
+            navigationTimer.Start();
+        }
+    }
+
+    private void ShowCurrentFull()
+    {
+        var expectedGeneration = Interlocked.Read(ref navigationGeneration);
+
+        var table = tableList[tableIndex];
+        TableNameText.Text = table.DisplayName;
+
         var statsCsvPath = GetTableStatsCsvPath();
-        var allStats = LoadOrCreateTableStats(statsCsvPath);
+        var allStats = GetCachedTableStats(statsCsvPath);
         var tableStats = FindTableStats(allStats, table.DisplayName) ?? new TableStatsEntry(table.DisplayName);
         dmdWindow?.ShowTableProperties(table.DisplayName, FormatTableStatsForDisplay(tableStats));
+
+        if (Interlocked.Read(ref navigationGeneration) != expectedGeneration)
+            return;
 
         if (!string.IsNullOrWhiteSpace(table.PreviewVideoPath) && File.Exists(table.PreviewVideoPath))
         {
@@ -217,6 +268,12 @@ public partial class MainWindow : Window
         {
             backglassWindow?.StopVideo();
         }
+    }
+
+    private void NavigationTimer_Tick(object? sender, EventArgs e)
+    {
+        navigationTimer?.Stop();
+        ShowCurrentFull();
     }
 
     private string GetTableStatsCsvPath()
@@ -280,6 +337,16 @@ public partial class MainWindow : Window
         }
 
         return tableStats;
+    }
+
+    private List<TableStatsEntry> GetCachedTableStats(string csvPath)
+    {
+        if (cachedTableStats != null && string.Equals(cachedTableStatsCsvPath, csvPath, StringComparison.OrdinalIgnoreCase))
+            return cachedTableStats;
+
+        cachedTableStatsCsvPath = csvPath;
+        cachedTableStats = LoadOrCreateTableStats(csvPath);
+        return cachedTableStats;
     }
 
     private static List<string> ParseCsvLine(string line)
@@ -407,6 +474,9 @@ public partial class MainWindow : Window
         tableStats.LastDatePlayed = DateTime.Today;
 
         SaveTableStats(statsCsvPath, allStats);
+
+        cachedTableStats = null;
+        cachedTableStatsCsvPath = null;
     }
 
     private sealed class TableStatsEntry
@@ -531,9 +601,7 @@ public partial class MainWindow : Window
                             backglassWindow.SetLoading(false);
                             backglassWindow.Topmost = true;
                         }
-                        dmdWindow?.ShowTableProperties(table.DisplayName, FormatTableStatsForDisplay(
-                            FindTableStats(LoadOrCreateTableStats(GetTableStatsCsvPath()), table.DisplayName) ?? new TableStatsEntry(table.DisplayName)));
-                        ShowCurrent();
+                        ShowCurrentFull();
                         Activate();
                         Topmost = true;
                     });
@@ -580,7 +648,7 @@ public partial class MainWindow : Window
             if (backglassWindow != null)
                 backglassWindow.Topmost = true;
 
-            ShowCurrent();
+            ShowCurrentFull();
         }
         catch (Exception ex)
         {

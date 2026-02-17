@@ -8,6 +8,7 @@
         AllowsTransparency="False"
         Background="Black"
         KeyDown="Window_KeyDown"
+        KeyUp="Window_KeyUp"
         MouseWheel="Window_MouseWheel"
         Loaded="Window_Loaded">
 
