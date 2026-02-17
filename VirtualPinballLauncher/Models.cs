@@ -4,7 +4,7 @@ using System.IO;
 
 namespace VirtualPinballLauncher;
 
-public sealed record TableItem(string VpxPath, string DisplayName, string? PreviewVideoPath);
+public sealed record TableItem(string VpxPath, string DisplayName, string? PreviewVideoPath, string? BackglassVideoPath);
 
 public static class TableScanner
 {
@@ -26,7 +26,11 @@ public static class TableScanner
             if (!string.IsNullOrWhiteSpace(cfg.VideosDirectory))
                 preview = Path.Combine(cfg.VideosDirectory, name + videoExt);
 
-            yield return new TableItem(vpx, name, preview);
+            string? backglass = null;
+            if (!string.IsNullOrWhiteSpace(cfg.BackglassVideosDirectory))
+                backglass = Path.Combine(cfg.BackglassVideosDirectory, name + videoExt);
+
+            yield return new TableItem(vpx, name, preview, backglass);
         }
     }
 }
