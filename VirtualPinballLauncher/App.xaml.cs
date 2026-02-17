@@ -33,6 +33,26 @@ public partial class App : System.Windows.Application
             }
         }
 
+        // CLI Mode: Record a backglass video for a specific table.
+        // VirtualPinballLauncher.exe --record-backglass "D:\Pinball\Tables\Table.vpx"
+        if (e.Args.Length >= 2 && string.Equals(e.Args[0], "--record-backglass", StringComparison.OrdinalIgnoreCase))
+        {
+            string vpxPath = e.Args[1];
+            try
+            {
+                var config = await Config.LoadAsync(Config.DefaultPath);
+                await Recorder.RecordBackglassPreviewAsync(config, vpxPath);
+                Shutdown(0);
+                return;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Record Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown(1);
+                return;
+            }
+        }
+
         // Launcher Mode: Show the main window.
         new MainWindow().Show();
     }
