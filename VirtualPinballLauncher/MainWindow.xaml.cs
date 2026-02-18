@@ -40,6 +40,8 @@ public partial class MainWindow : Window
     private List<TableStatsEntry>? cachedTableStats;
     private string? cachedTableStatsCsvPath;
 
+    private CancellationTokenSource playbackCancellation = new();
+
     private void ForceHideCursor()
     {
         if (cursorHidden) return;
@@ -90,7 +92,7 @@ public partial class MainWindow : Window
 
         navigationTimer = new System.Windows.Threading.DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(100)
+            Interval = TimeSpan.FromMilliseconds(5)
         };
         navigationTimer.Tick += NavigationTimer_Tick;
 
@@ -152,20 +154,22 @@ public partial class MainWindow : Window
             return;
         }
 
+        bool isRepeat = e.IsRepeat;
+
         switch (e.Key)
         {
             case Key.Down:
             case Key.Right:
             case Key.RightShift:
             case Key.PageDown:
-                Next();
+                Next(isRepeat);
                 break;
 
             case Key.Up:
             case Key.Left:
             case Key.LeftShift:
             case Key.PageUp:
-                Prev();
+                Prev(isRepeat);
                 break;
 
             case Key.Enter:
@@ -197,39 +201,41 @@ public partial class MainWindow : Window
             case Key.Left:
             case Key.LeftShift:
             case Key.PageUp:
-                navigationTimer?.Stop();
-                navigationTimer?.Start();
+                if (navigationTimer?.IsEnabled != true)
+                    ShowCurrentFull();
                 break;
         }
     }
 
-    private void Next()
+    private void Next(bool isRepeat = false)
     {
         tableIndex = (tableIndex + 1) % tableList.Count;
-        ShowCurrent();
+        ShowCurrent(isRepeat);
     }
 
-    private void Prev()
+    private void Prev(bool isRepeat = false)
     {
         tableIndex = (tableIndex - 1 + tableList.Count) % tableList.Count;
-        ShowCurrent();
+        ShowCurrent(isRepeat);
     }
 
-    private void ShowCurrent()
-    {
+    private void ShowCurrent(bool isRepeat = false)
+    {   
         var table = tableList[tableIndex];
         TableNameText.Text = table.DisplayName;
 
         Interlocked.Increment(ref navigationGeneration);
 
-        if (navigationTimer != null)
+        playbackCancellation.Cancel();
+
+        if (navigationTimer != null && !isRepeat)
         {
             navigationTimer.Stop();
             navigationTimer.Start();
         }
     }
 
-    private void ShowCurrentFull()
+    private async void ShowCurrentFull()
     {
         var expectedGeneration = Interlocked.Read(ref navigationGeneration);
 
@@ -239,35 +245,50 @@ public partial class MainWindow : Window
         var statsCsvPath = GetTableStatsCsvPath();
         var allStats = GetCachedTableStats(statsCsvPath);
         var tableStats = FindTableStats(allStats, table.DisplayName) ?? new TableStatsEntry(table.DisplayName);
-        dmdWindow?.ShowTableProperties(table.DisplayName, FormatTableStatsForDisplay(tableStats));
 
         if (Interlocked.Read(ref navigationGeneration) != expectedGeneration)
             return;
 
-        if (!string.IsNullOrWhiteSpace(table.PreviewVideoPath) && File.Exists(table.PreviewVideoPath))
+        // Cancel any in-flight “play prep”
+        playbackCancellation.Cancel();
+        playbackCancellation.Dispose();
+        playbackCancellation = new CancellationTokenSource();
+        var token = playbackCancellation.Token;
+
+        try
         {
-            try
-            {
-                PlayPreview(table.PreviewVideoPath);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString(), "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            // Kick both preparations concurrently
+            var playfieldTask = PlayPreviewAsync(table.PreviewVideoPath, token);
+            var backglassTask = backglassWindow != null
+                ? backglassWindow.PlayBackglassAsync(table.BackglassVideoPath, token)
+                : Task.CompletedTask;
+
+            dmdWindow?.ShowTableProperties(table.DisplayName, FormatTableStatsForDisplay(tableStats));
+            await Task.WhenAll(playfieldTask, backglassTask);
         }
-        else
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task PlayPreviewAsync(string path, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
-            mediaPlayer.Stop();
+            await Dispatcher.InvokeAsync(() => mediaPlayer.Stop());
+            return;
         }
 
-        if (!string.IsNullOrWhiteSpace(table.BackglassVideoPath) && File.Exists(table.BackglassVideoPath))
+        token.ThrowIfCancellationRequested();
+
+        await Task.Run(async () =>
         {
-            backglassWindow?.PlayVideo(table.BackglassVideoPath);
-        }
-        else
-        {
-            backglassWindow?.StopVideo();
-        }
+            token.ThrowIfCancellationRequested();
+
+            mediaPlayer.EndReached -= OnEndReached;
+            mediaPlayer.EndReached += OnEndReached;
+
+            var m = new Media(vlcPlayer, new Uri(path));
+            mediaPlayer.Play(m);
+        }, token);
     }
 
     private void NavigationTimer_Tick(object? sender, EventArgs e)
