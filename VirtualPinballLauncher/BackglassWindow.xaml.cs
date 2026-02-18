@@ -10,9 +10,9 @@ namespace VirtualPinballLauncher;
 
 public partial class BackglassWindow : Window
 {
-    private LibVLC? vlcPlayer;
-    private MediaPlayer? mediaPlayer;
-    private string? currentVideoPath;
+    private LibVLC vlcPlayer = null!;
+    private MediaPlayer mediaPlayer = null!;
+    private volatile string? currentVideoPath;
 
     public BackglassWindow()
     {
@@ -27,9 +27,9 @@ public partial class BackglassWindow : Window
 
         Closed += (_, _) =>
         {
-            mediaPlayer?.Stop();
-            mediaPlayer?.Dispose();
-            vlcPlayer?.Dispose();
+            mediaPlayer.Stop();
+            mediaPlayer.Dispose();
+            vlcPlayer.Dispose();
         };
     }
 
@@ -48,10 +48,32 @@ public partial class BackglassWindow : Window
         media.Dispose();
     }
 
+    public async Task PlayBackglassAsync(string path, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            await Dispatcher.InvokeAsync(() => mediaPlayer.Stop());
+            return;
+        }
+
+        var media = new Media(vlcPlayer, new Uri(path));
+
+        token.ThrowIfCancellationRequested();
+
+        await Dispatcher.InvokeAsync(() =>
+        {
+            currentVideoPath = path;
+            mediaPlayer.EndReached -= OnEndReached;
+            mediaPlayer.EndReached += OnEndReached;
+            mediaPlayer.Play(media);
+            media.Dispose();
+        });
+    }
+
     public void StopVideo()
     {
         currentVideoPath = null;
-        mediaPlayer?.Stop();
+        mediaPlayer.Stop();
     }
 
     private void OnEndReached(object? sender, EventArgs e)
@@ -63,7 +85,7 @@ public partial class BackglassWindow : Window
                 if (!string.IsNullOrWhiteSpace(currentVideoPath) && File.Exists(currentVideoPath))
                     PlayVideo(currentVideoPath);
                 else
-                    mediaPlayer?.Stop();
+                    mediaPlayer.Stop();
             });
         });
     }
