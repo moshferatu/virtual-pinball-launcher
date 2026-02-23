@@ -6,7 +6,6 @@
         ResizeMode="NoResize"
         AllowsTransparency="False"
         Background="Black"
-        Topmost="True"
         ShowInTaskbar="False">
     <Grid>
         <Border Padding="36" Background="Black">
