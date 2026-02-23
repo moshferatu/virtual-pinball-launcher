@@ -1,13 +1,13 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace VirtualPinballLauncher;
 
 public static class Recorder
-{   
+{
     public static async Task RecordPreviewAsync(Config config, string vpxPath)
     {
         if (!File.Exists(config.VpxExePath))
@@ -37,13 +37,16 @@ public static class Recorder
             throw new Exception("Failed to start VPX process.");
 
         // 2) Record the playfield.
-        int video_width  = ScreenSize.PlayfieldWidth;
+        int video_width = ScreenSize.PlayfieldWidth;
         int video_height = ScreenSize.PlayfieldHeight;
         int video_length = config.RecordSeconds;
 
         var tableName = Path.GetFileNameWithoutExtension(vpxPath);
-        var video_file = Path.Combine(config.VideosDirectory, tableName + 
-            (string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension));
+        var video_file = Path.Combine(
+            config.VideosDirectory,
+            tableName + (string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension)
+        );
+
         if (File.Exists(video_file))
             File.Delete(video_file);
 
@@ -69,10 +72,7 @@ public static class Recorder
 
         await ffmpeg.WaitForExitAsync();
 
-        vpx.Kill();
-        // TODO: Kill PuP Player as well, if it's running.
-        // It can sometimes be left open after killing VPX.
-        // This only applies to tables with PuP packs.
+        await StopVpxAndRelatedAsync(vpx);
     }
 
     public static async Task RecordBackglassPreviewAsync(Config config, string vpxPath)
@@ -109,13 +109,16 @@ public static class Recorder
 
         // 2) Record the backglass monitor.
         var rect = bounds.Value;
-        int video_width  = rect.Width;
+        int video_width = rect.Width;
         int video_height = rect.Height;
         int video_length = config.RecordSeconds;
 
         var tableName = Path.GetFileNameWithoutExtension(vpxPath);
-        var video_file = Path.Combine(config.BackglassVideosDirectory, tableName +
-            (string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension));
+        var video_file = Path.Combine(
+            config.BackglassVideosDirectory,
+            tableName + (string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension)
+        );
+
         if (File.Exists(video_file))
             File.Delete(video_file);
 
@@ -142,6 +145,86 @@ public static class Recorder
 
         await ffmpeg.WaitForExitAsync();
 
-        vpx.Kill();
+        await StopVpxAndRelatedAsync(vpx);
+    }
+
+    private static async Task StopVpxAndRelatedAsync(Process vpx)
+    {
+        // VPX itself
+        TryCloseThenKill(vpx, timeoutMs: 1500);
+
+        // PinUp processes that commonly linger after VPX is killed
+        // (Process names: no ".exe")
+        var pupProcessNames = new[]
+        {
+            "PinUpPlayer",
+            "PinUpDisplay",
+
+            // Optional/common helpers (uncomment if you see these linger in your setup):
+            // "PinUpMenu",
+            // "PinUpPopper",
+            // "PuPServer",   // some installs use this name
+        };
+
+        // Give VPX a moment to cascade-close children before we sweep.
+        await Task.Delay(750);
+
+        foreach (var name in pupProcessNames)
+            KillAllByName(name, timeoutMs: 1500);
+    }
+
+    private static void KillAllByName(string processName, int timeoutMs)
+    {
+        Process[] procs;
+        try
+        {
+            procs = Process.GetProcessesByName(processName);
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (var p in procs)
+            TryCloseThenKill(p, timeoutMs);
+    }
+
+    private static void TryCloseThenKill(Process p, int timeoutMs)
+    {
+        try
+        {
+            if (p.HasExited) return;
+
+            // Attempt graceful shutdown if it has a main window
+            try
+            {
+                if (p.MainWindowHandle != IntPtr.Zero)
+                    p.CloseMainWindow();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            if (!p.WaitForExit(timeoutMs))
+            {
+                try
+                {
+                    p.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+        }
+        catch
+        {
+            // ignore any race conditions/access issues
+        }
+        finally
+        {
+            try { p.Dispose(); } catch { /* ignore */ }
+        }
     }
 }
