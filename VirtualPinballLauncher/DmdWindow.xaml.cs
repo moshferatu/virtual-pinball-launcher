@@ -36,6 +36,14 @@ public partial class DmdWindow : Window
         PropertiesText.Text = propertiesDisplayText;
     }
 
+    public void SetLoading(bool isLoading)
+    {
+        LoadingOverlay.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
+
+        if (isLoading)
+            Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
+    }
+
     public void MoveToRightmostMonitor()
     {
         var screen = Forms.Screen.AllScreens
