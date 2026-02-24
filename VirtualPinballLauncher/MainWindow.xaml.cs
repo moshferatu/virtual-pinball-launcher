@@ -600,18 +600,37 @@ public partial class MainWindow : Window
                 if (dmdWindow != null)
                 {
                     dmdWindow.Topmost = false;
-                    dmdWindow.WindowState = WindowState.Minimized;
+                    dmdWindow.SetLoading(true);
                 }
                 if (backglassWindow != null)
                 {
                     backglassWindow.Topmost = false;
                     backglassWindow.SetLoading(true);
                 }
+
+                var dmdMinimizeCts = new CancellationTokenSource();
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(3000, dmdMinimizeCts.Token);
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            if (dmdWindow != null)
+                                dmdWindow.WindowState = WindowState.Minimized;
+                        });
+                    }
+                    catch (OperationCanceledException) { }
+                });
+
                 proc.EnableRaisingEvents = true;
                 proc.Exited += (_, __) =>
                 {
                     Dispatcher.Invoke(() =>
                     {
+                        dmdMinimizeCts.Cancel();
+                        dmdMinimizeCts.Dispose();
+
                         stopwatch.Stop();
 
                         try
@@ -627,7 +646,9 @@ public partial class MainWindow : Window
                         WindowState = WindowState.Maximized;
                         if (dmdWindow != null)
                         {
+                            dmdWindow.SetLoading(false);
                             dmdWindow.WindowState = WindowState.Maximized;
+                            dmdWindow.Topmost = true;
                         }
                         if (backglassWindow != null)
                         {
