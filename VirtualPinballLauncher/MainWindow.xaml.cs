@@ -608,29 +608,11 @@ public partial class MainWindow : Window
                     backglassWindow.SetLoading(true);
                 }
 
-                var dmdMinimizeCts = new CancellationTokenSource();
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await Task.Delay(3000, dmdMinimizeCts.Token);
-                        await Dispatcher.InvokeAsync(() =>
-                        {
-                            if (dmdWindow != null)
-                                dmdWindow.WindowState = WindowState.Minimized;
-                        });
-                    }
-                    catch (OperationCanceledException) { }
-                });
-
                 proc.EnableRaisingEvents = true;
                 proc.Exited += (_, __) =>
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        dmdMinimizeCts.Cancel();
-                        dmdMinimizeCts.Dispose();
-
                         stopwatch.Stop();
 
                         try
@@ -665,6 +647,7 @@ public partial class MainWindow : Window
                 _ = Task.Run(async () =>
                 {
                     const string targetTitle = "Visual Pinball Player";
+                    bool playfieldWindowFound = false;
                     IntPtr hwnd = IntPtr.Zero;
 
                     // Poll for up to ~30 seconds
@@ -674,15 +657,25 @@ public partial class MainWindow : Window
                         if (proc.HasExited) return;
 
                         hwnd = FindWindow(null, targetTitle);
-                        if (hwnd != IntPtr.Zero) break;
+                        if (hwnd != IntPtr.Zero)
+                        {
+                            playfieldWindowFound = true;
+                            break;
+                        }
                     }
 
-                    if (hwnd != IntPtr.Zero)
+                    if (playfieldWindowFound)
                     {
                         // Small extra delay to let the window finish initializing
                         await Task.Delay(1000);
                         ShowWindow(hwnd, SW_RESTORE);
                         SetForegroundWindow(hwnd);
+
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            if (dmdWindow != null)
+                                dmdWindow.WindowState = WindowState.Minimized;
+                        });
                     }
                 });
             }
