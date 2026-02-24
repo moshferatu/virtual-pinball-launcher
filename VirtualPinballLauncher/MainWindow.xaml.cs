@@ -30,6 +30,18 @@ public partial class MainWindow : Window
     private DmdWindow? dmdWindow;
     private BackglassWindow? backglassWindow;
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    private const int SW_RESTORE = 9;
+
     [DllImport("user32.dll")]
     private static extern int ShowCursor(bool bShow);
 
@@ -627,6 +639,31 @@ public partial class MainWindow : Window
                         Topmost = true;
                     });
                 };
+
+                // Poll for the player window and focus it
+                _ = Task.Run(async () =>
+                {
+                    const string targetTitle = "Visual Pinball Player";
+                    IntPtr hwnd = IntPtr.Zero;
+
+                    // Poll for up to ~30 seconds
+                    for (int i = 0; i < 60; i++)
+                    {
+                        await Task.Delay(500);
+                        if (proc.HasExited) return;
+
+                        hwnd = FindWindow(null, targetTitle);
+                        if (hwnd != IntPtr.Zero) break;
+                    }
+
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        // Small extra delay to let the window finish initializing
+                        await Task.Delay(1000);
+                        ShowWindow(hwnd, SW_RESTORE);
+                        SetForegroundWindow(hwnd);
+                    }
+                });
             }
         }
         catch (Exception ex)
