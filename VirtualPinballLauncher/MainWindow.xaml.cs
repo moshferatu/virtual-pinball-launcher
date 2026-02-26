@@ -668,14 +668,10 @@ public partial class MainWindow : Window
                     {
                         // Small extra delay to let the window finish initializing
                         await Task.Delay(1000);
+                        if (dmdWindow != null)
+                            Dispatcher.Invoke(() => dmdWindow.WindowState = WindowState.Minimized);
                         ShowWindow(hwnd, SW_RESTORE);
                         SetForegroundWindow(hwnd);
-
-                        await Dispatcher.InvokeAsync(() =>
-                        {
-                            if (dmdWindow != null)
-                                dmdWindow.WindowState = WindowState.Minimized;
-                        });
                     }
                 });
             }
