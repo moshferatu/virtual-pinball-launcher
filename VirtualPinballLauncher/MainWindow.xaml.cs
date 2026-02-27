@@ -628,8 +628,8 @@ public partial class MainWindow : Window
                         WindowState = WindowState.Maximized;
                         if (dmdWindow != null)
                         {
+                            dmdWindow.Show();
                             dmdWindow.SetLoading(false);
-                            dmdWindow.WindowState = WindowState.Maximized;
                             dmdWindow.Topmost = true;
                         }
                         if (backglassWindow != null)
@@ -669,7 +669,7 @@ public partial class MainWindow : Window
                         // Small extra delay to let the window finish initializing
                         await Task.Delay(1000);
                         if (dmdWindow != null)
-                            Dispatcher.Invoke(() => dmdWindow.WindowState = WindowState.Minimized);
+                            Dispatcher.Invoke(() => dmdWindow.Hide());
                         ShowWindow(hwnd, SW_RESTORE);
                         SetForegroundWindow(hwnd);
                     }
