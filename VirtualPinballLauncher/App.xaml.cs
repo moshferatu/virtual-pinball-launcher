@@ -53,6 +53,26 @@ public partial class App : System.Windows.Application
             }
         }
 
+        // CLI Mode: Record playfield and backglass videos in parallel for a specific table.
+        // VirtualPinballLauncher.exe --record-both "D:\Pinball\Tables\Table.vpx"
+        if (e.Args.Length >= 2 && string.Equals(e.Args[0], "--record-both", StringComparison.OrdinalIgnoreCase))
+        {
+            string vpxPath = e.Args[1];
+            try
+            {
+                var config = await Config.LoadAsync(Config.DefaultPath);
+                await Recorder.RecordBothPreviewsAsync(config, vpxPath);
+                Shutdown(0);
+                return;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Record Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown(1);
+                return;
+            }
+        }
+
         // Launcher Mode: Show the main window.
         new MainWindow().Show();
     }

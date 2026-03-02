@@ -703,12 +703,8 @@ public partial class MainWindow : Window
             if (backglassWindow != null)
                 backglassWindow.Topmost = false;
 
-            // 1) Record playfield video.
-            await RunRecordProcessAsync(self, $"--record \"{table.VpxPath}\"");
-
-            // 2) Record backglass video.
-            if (!string.IsNullOrWhiteSpace(config.BackglassVideosDirectory))
-                await RunRecordProcessAsync(self, $"--record-backglass \"{table.VpxPath}\"");
+            // Record playfield and backglass videos in parallel (single VPX session).
+            await RunRecordProcessAsync(self, $"--record-both \"{table.VpxPath}\"");
 
             WindowState = WindowState.Maximized;
             Activate();
