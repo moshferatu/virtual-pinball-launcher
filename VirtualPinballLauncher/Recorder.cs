@@ -31,7 +31,7 @@ public static class Recorder
         });
 
         // Give the table playfield time to come to the foreground.
-        await Task.Delay(TimeSpan.FromSeconds(10));
+        await Task.Delay(TimeSpan.FromSeconds(config.RecordDelaySeconds));
 
         if (vpx == null)
             throw new Exception("Failed to start VPX process.");
@@ -102,7 +102,7 @@ public static class Recorder
         });
 
         // Give the table time to come to the foreground.
-        await Task.Delay(TimeSpan.FromSeconds(10));
+        await Task.Delay(TimeSpan.FromSeconds(config.RecordDelaySeconds));
 
         if (vpx == null)
             throw new Exception("Failed to start VPX process.");
@@ -183,7 +183,7 @@ public static class Recorder
         });
 
         // Give the table time to come to the foreground.
-        await Task.Delay(TimeSpan.FromSeconds(10));
+        await Task.Delay(TimeSpan.FromSeconds(config.RecordDelaySeconds));
 
         if (vpx == null)
             throw new Exception("Failed to start VPX process.");
