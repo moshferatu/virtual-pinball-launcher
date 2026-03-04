@@ -703,6 +703,15 @@ public partial class MainWindow : Window
             if (backglassWindow != null)
                 backglassWindow.Topmost = false;
 
+            // Stop playback before recording so LibVLC releases its file handles.
+            // Without this, the recorder subprocess's File.Delete calls trigger a
+            // native LibVLC crash when it tries to read a file that has been deleted
+            // out from under it.
+            playbackCancellation.Cancel();
+            mediaPlayer.EndReached -= OnEndReached;
+            mediaPlayer.Stop();
+            backglassWindow?.StopVideo();
+
             // Record playfield and backglass videos in parallel (single VPX session).
             await RunRecordProcessAsync(self, $"--record-both \"{table.VpxPath}\"");
 
