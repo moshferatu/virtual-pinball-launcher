@@ -16,6 +16,12 @@ public sealed class TableStats
     private List<TableStatsEntry>? cachedTableStats;
     private string? cachedTableStatsCsvPath;
 
+    public List<TableStatsEntry> GetAllTableStats(string tablesDirectory)
+    {
+        var statsCsvPath = GetTableStatsCsvPath(tablesDirectory);
+        return GetCachedTableStats(statsCsvPath);
+    }
+
     public TableStatsEntry GetTableStatsForDisplay(string tablesDirectory, string tableName)
     {
         var statsCsvPath = GetTableStatsCsvPath(tablesDirectory);
