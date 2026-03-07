@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private int tableIndex = 0;
     private readonly TableStats tableStats = new();
     private bool sortByPopularity = true;
+    private readonly Random random = new();
 
     private LibVLC vlcPlayer = null!;
     private MediaPlayer mediaPlayer = null!;
@@ -198,6 +199,11 @@ public partial class MainWindow : Window
                 _ = RecordSelectedPreviewAsync();
                 break;
 
+            case Key.D1:
+            case Key.NumPad1:
+                if (!isRepeat) SelectRandom();
+                break;
+
             case Key.LeftCtrl:
             case Key.RightCtrl:
                 if (!isRepeat) ToggleSortMode();
@@ -258,6 +264,13 @@ public partial class MainWindow : Window
         tableIndex = tableList.FindIndex(t => string.Equals(t.DisplayName, currentTableName, StringComparison.OrdinalIgnoreCase));
         if (tableIndex < 0) tableIndex = 0;
 
+        ShowCurrentFull();
+    }
+
+    private void SelectRandom()
+    {
+        tableIndex = random.Next(tableList.Count);
+        Task.Run(() => flipperSound?.Play());
         ShowCurrentFull();
     }
 
