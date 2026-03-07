@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private List<TableItem> tableList = new();
     private int tableIndex = 0;
     private readonly TableStats tableStats = new();
+    private bool sortByPopularity = true;
 
     private LibVLC vlcPlayer = null!;
     private MediaPlayer mediaPlayer = null!;
@@ -115,6 +116,7 @@ public partial class MainWindow : Window
         {
             config = await Config.LoadAsync(Config.DefaultPath);
             tableList = TableScanner.Scan(config).ToList();
+            SortTableList();
 
             if (tableList.Count == 0)
             {
@@ -196,6 +198,11 @@ public partial class MainWindow : Window
                 _ = RecordSelectedPreviewAsync();
                 break;
 
+            case Key.LeftCtrl:
+            case Key.RightCtrl:
+                if (!isRepeat) ToggleSortMode();
+                break;
+
             case Key.Escape:
                 Close();
                 break;
@@ -220,6 +227,38 @@ public partial class MainWindow : Window
                     ShowCurrentFull();
                 break;
         }
+    }
+
+    private void SortTableList()
+    {
+        if (sortByPopularity)
+        {
+            var allStats = tableStats.GetAllTableStats(config.TablesDirectory);
+            tableList = tableList
+                .OrderByDescending(t => allStats
+                    .FirstOrDefault(s => string.Equals(s.TableName, t.DisplayName, StringComparison.OrdinalIgnoreCase))
+                    ?.TotalTimeSpentPlaying ?? TimeSpan.Zero)
+                .ThenBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        else
+        {
+            tableList = tableList.OrderBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
+
+    private void ToggleSortMode()
+    {
+        if (tableList.Count == 0) return;
+
+        var currentTableName = tableList[tableIndex].DisplayName;
+        sortByPopularity = !sortByPopularity;
+        SortTableList();
+
+        tableIndex = tableList.FindIndex(t => string.Equals(t.DisplayName, currentTableName, StringComparison.OrdinalIgnoreCase));
+        if (tableIndex < 0) tableIndex = 0;
+
+        ShowCurrentFull();
     }
 
     private void Next(bool isRepeat = false)
@@ -405,6 +444,13 @@ public partial class MainWindow : Window
                         try
                         {
                             tableStats.UpdateTableStatsAfterPlay(config.TablesDirectory, table.DisplayName, stopwatch.Elapsed);
+
+                            if (sortByPopularity)
+                            {
+                                SortTableList();
+                                tableIndex = tableList.FindIndex(t => string.Equals(t.DisplayName, table.DisplayName, StringComparison.OrdinalIgnoreCase));
+                                if (tableIndex < 0) tableIndex = 0;
+                            }
                         }
                         catch (Exception ex)
                         {
