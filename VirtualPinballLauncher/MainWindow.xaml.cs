@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Media;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,6 +48,7 @@ public partial class MainWindow : Window
     private long navigationGeneration;
 
     private CancellationTokenSource playbackCancellation = new();
+    private SoundPlayer? flipperSound;
 
     private void ForceHideCursor()
     {
@@ -83,6 +85,13 @@ public partial class MainWindow : Window
         }
 
         PreviewPlayer.MediaPlayer = mediaPlayer;
+
+        var wavPath = Path.Combine(AppContext.BaseDirectory, "flipper.wav");
+        if (File.Exists(wavPath))
+        {
+            flipperSound = new SoundPlayer(wavPath);
+            await Task.Run(() => flipperSound.Load());
+        }
 
         WindowState = WindowState.Maximized;
         Topmost = true;
@@ -226,9 +235,12 @@ public partial class MainWindow : Window
     }
 
     private void ShowCurrent(bool isRepeat = false)
-    {   
+    {
         var table = tableList[tableIndex];
         TableNameText.Text = table.DisplayName;
+
+        if (!isRepeat)
+            Task.Run(() => flipperSound?.Play());
 
         Interlocked.Increment(ref navigationGeneration);
 
