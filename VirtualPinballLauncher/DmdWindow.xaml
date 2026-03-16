@@ -10,18 +10,30 @@
     <Grid>
         <Border Padding="36" Background="Black">
             <StackPanel VerticalAlignment="Center"
-                        HorizontalAlignment="Center">
+                        HorizontalAlignment="Stretch">
 
-                <TextBlock x:Name="TableTitleText"
-                           Foreground="White"
-                           FontSize="100"
-                           FontWeight="Bold"
-                           TextAlignment="Center"
-                           TextTrimming="CharacterEllipsis"/>
+                <Grid>
+                    <TextBlock FontSize="125"
+                               FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
+                               FontWeight="Normal"
+                               Visibility="Hidden"
+                               Text=" "/>
+                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly"
+                             HorizontalAlignment="Center">
+                        <TextBlock x:Name="TableTitleText"
+                                   Foreground="Yellow"
+                                   FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
+                                   FontSize="125"
+                                   FontWeight="Normal"/>
+                    </Viewbox>
+                </Grid>
 
                 <TextBlock x:Name="PropertiesText"
                            Foreground="White"
-                           FontSize="65"
+                           FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
+                           FontSize="80"
+                           LineStackingStrategy="BlockLineHeight"
+                           LineHeight="96"
                            Margin="0,24,0,0"
                            TextAlignment="Center"
                            TextWrapping="Wrap"/>

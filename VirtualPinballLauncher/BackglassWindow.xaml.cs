@@ -48,7 +48,7 @@ public partial class BackglassWindow : Window
         media.Dispose();
     }
 
-    public async Task PlayBackglassAsync(string path, CancellationToken token)
+    public async Task PlayBackglassAsync(string? path, CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {

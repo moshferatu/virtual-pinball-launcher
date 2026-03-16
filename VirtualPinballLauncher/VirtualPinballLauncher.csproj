@@ -17,4 +17,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Digital Dot Roadsign.otf" />
+  </ItemGroup>
 </Project>

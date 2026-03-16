@@ -336,7 +336,7 @@ public partial class MainWindow : Window
         catch (OperationCanceledException) { }
     }
 
-    private async Task PlayPreviewAsync(string path, CancellationToken token)
+    private async Task PlayPreviewAsync(string? path, CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
@@ -346,16 +346,16 @@ public partial class MainWindow : Window
 
         token.ThrowIfCancellationRequested();
 
-        await Task.Run(async () =>
+        await Dispatcher.InvokeAsync(() =>
         {
             token.ThrowIfCancellationRequested();
 
             mediaPlayer.EndReached -= OnEndReached;
             mediaPlayer.EndReached += OnEndReached;
 
-            var m = new Media(vlcPlayer, new Uri(path));
-            mediaPlayer.Play(m);
-        }, token);
+            using var media = new Media(vlcPlayer, new Uri(path));
+            mediaPlayer.Play(media);
+        });
     }
 
     private void NavigationTimer_Tick(object? sender, EventArgs e)
