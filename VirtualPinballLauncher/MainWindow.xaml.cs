@@ -76,7 +76,11 @@ public partial class MainWindow : Window
     {
         try
         {
-            vlcPlayer = new LibVLC("--no-video-title-show");
+            vlcPlayer = new LibVLC(
+                "--no-video-title-show",
+                "--no-drop-late-frames",
+                "--no-skip-frames",
+                "--clock-jitter=0");
             mediaPlayer = new MediaPlayer(vlcPlayer);
         }
         catch (Exception ex)

@@ -20,7 +20,11 @@ public partial class BackglassWindow : Window
 
         Loaded += (_, _) =>
         {
-            vlcPlayer = new LibVLC("--no-video-title-show");
+            vlcPlayer = new LibVLC(
+                "--no-video-title-show",
+                "--no-drop-late-frames",
+                "--no-skip-frames",
+                "--clock-jitter=0");
             mediaPlayer = new MediaPlayer(vlcPlayer);
             BackglassPlayer.MediaPlayer = mediaPlayer;
         };
