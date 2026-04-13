@@ -22,7 +22,7 @@
                 <Grid>
                     <Border VerticalAlignment="Bottom"
                             Background="#DD000000"
-                            BorderBrush="DimGray"
+                            BorderBrush="Red"
                             BorderThickness="0,10,0,10"
                             Padding="24"
                             Margin="0,0,0,200">
