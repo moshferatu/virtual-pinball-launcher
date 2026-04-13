@@ -13,25 +13,6 @@ public partial class DmdWindow : Window
         InitializeComponent();
     }
 
-    public void MoveToPreferredMonitor(int preferredZeroBasedIndex)
-    {
-        var screens = Forms.Screen.AllScreens;
-        if (screens.Length == 0)
-            return;
-
-        var index = preferredZeroBasedIndex;
-        if (index < 0) index = 0;
-        if (index >= screens.Length) index = screens.Length - 1;
-
-        var screen = screens[index];
-        WindowState = WindowState.Normal;
-        WindowStartupLocation = WindowStartupLocation.Manual;
-        Left = screen.Bounds.Left;
-        Top = screen.Bounds.Top;
-        Width = screen.Bounds.Width;
-        Height = screen.Bounds.Height;
-    }
-
     private static readonly SolidColorBrush LabelBrush = new(Colors.DimGray);
     private static readonly SolidColorBrush ValueBrush = new(Colors.White);
 

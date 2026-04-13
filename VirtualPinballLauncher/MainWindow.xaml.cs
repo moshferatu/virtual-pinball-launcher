@@ -106,8 +106,13 @@ public partial class MainWindow : Window
         ForceHideCursor();
         Activated += (_, __) => ForceHideCursor();
 
-        EnsureDmdWindow();
-        EnsureBackglassWindow();
+        dmdWindow = new DmdWindow();
+        dmdWindow.MoveToRightmostMonitor();
+        dmdWindow.Show();
+
+        backglassWindow = new BackglassWindow();
+        backglassWindow.MoveToSecondRightmostMonitor();
+        backglassWindow.Show();
 
         Focus();
 
@@ -138,26 +143,6 @@ public partial class MainWindow : Window
             TableNameText.Text = "Error loading config / scanning tables.";
             MessageBox.Show(ex.ToString(), "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-    }
-
-    private void EnsureDmdWindow()
-    {
-        if (dmdWindow != null)
-            return;
-
-        dmdWindow = new DmdWindow();
-        dmdWindow.MoveToRightmostMonitor();
-        dmdWindow.Show();
-    }
-
-    private void EnsureBackglassWindow()
-    {
-        if (backglassWindow != null)
-            return;
-
-        backglassWindow = new BackglassWindow();
-        backglassWindow.MoveToSecondRightmostMonitor();
-        backglassWindow.Show();
     }
 
     private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -370,17 +355,6 @@ public partial class MainWindow : Window
         ShowCurrentFull();
     }
 
-    private void PlayPreview(string path)
-    {
-        // Detach any previous handler.
-        mediaPlayer.EndReached -= OnEndReached;
-        mediaPlayer.EndReached += OnEndReached;
-
-        var media = new Media(vlcPlayer, new Uri(path));
-        mediaPlayer.Play(media);
-        media.Dispose();
-    }
-
     private void OnEndReached(object? sender, EventArgs e)
     {
         // Don't block the media player thread.
@@ -388,11 +362,7 @@ public partial class MainWindow : Window
         {
             Dispatcher.BeginInvoke(() =>
             {
-                var table = tableList[tableIndex];
-                if (!string.IsNullOrWhiteSpace(table.PreviewVideoPath) && File.Exists(table.PreviewVideoPath))
-                    PlayPreview(table.PreviewVideoPath);
-                else
-                    mediaPlayer.Stop();
+                _ = PlayPreviewAsync(tableList[tableIndex].PreviewVideoPath, CancellationToken.None);
             });
         });
     }

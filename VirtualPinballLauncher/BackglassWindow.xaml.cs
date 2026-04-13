@@ -102,19 +102,6 @@ public partial class BackglassWindow : Window
             Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
     }
 
-    public void MoveToPreferredMonitor(int preferredZeroBasedIndex)
-    {
-        var screens = Forms.Screen.AllScreens;
-        if (screens.Length == 0)
-            return;
-
-        var index = preferredZeroBasedIndex;
-        if (index < 0) index = 0;
-        if (index >= screens.Length) index = screens.Length - 1;
-
-        MoveToScreen(screens[index]);
-    }
-
     public void MoveToSecondRightmostMonitor()
     {
         var sorted = Forms.Screen.AllScreens
