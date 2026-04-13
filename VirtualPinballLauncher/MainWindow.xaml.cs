@@ -196,6 +196,8 @@ public partial class MainWindow : Window
 
             case Key.Enter:
             case Key.Space:
+            case Key.D1:
+            case Key.NumPad1:
                 LaunchSelected();
                 break;
 
@@ -203,8 +205,8 @@ public partial class MainWindow : Window
                 _ = RecordSelectedPreviewAsync();
                 break;
 
-            case Key.D1:
-            case Key.NumPad1:
+            case Key.D5:
+            case Key.NumPad5:
                 if (!isRepeat) SelectRandom();
                 break;
 
