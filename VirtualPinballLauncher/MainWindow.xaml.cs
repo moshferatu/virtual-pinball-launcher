@@ -1,4 +1,3 @@
-using LibVLCSharp.Shared;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -24,8 +23,7 @@ public partial class MainWindow : Window
     private bool sortByPopularity = true;
     private readonly Random random = new();
 
-    private LibVLC vlcPlayer = null!;
-    private MediaPlayer mediaPlayer = null!;
+    private LoopingVideoPlayer videoPlayer = null!;
     private DmdWindow? dmdWindow;
     private BackglassWindow? backglassWindow;
 
@@ -76,12 +74,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            vlcPlayer = new LibVLC(
-                "--no-video-title-show",
-                "--no-drop-late-frames",
-                "--no-skip-frames",
-                "--clock-jitter=0");
-            mediaPlayer = new MediaPlayer(vlcPlayer);
+            videoPlayer = new LoopingVideoPlayer(Dispatcher);
         }
         catch (Exception ex)
         {
@@ -90,7 +83,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        PreviewPlayer.MediaPlayer = mediaPlayer;
+        PreviewPlayer.MediaPlayer = videoPlayer.MediaPlayer;
 
         var wavPath = Path.Combine(AppContext.BaseDirectory, "flipper.wav");
         if (File.Exists(wavPath))
@@ -316,7 +309,7 @@ public partial class MainWindow : Window
         try
         {
             // Kick both preparations concurrently
-            var playfieldTask = PlayPreviewAsync(table.PreviewVideoPath, token);
+            var playfieldTask = videoPlayer.PlayAsync(table.PreviewVideoPath, token);
             var backglassTask = backglassWindow != null
                 ? backglassWindow.PlayBackglassAsync(table.BackglassVideoPath, token)
                 : Task.CompletedTask;
@@ -327,44 +320,10 @@ public partial class MainWindow : Window
         catch (OperationCanceledException) { }
     }
 
-    private async Task PlayPreviewAsync(string? path, CancellationToken token)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-        {
-            await Dispatcher.InvokeAsync(() => mediaPlayer.Stop());
-            return;
-        }
-
-        token.ThrowIfCancellationRequested();
-
-        await Dispatcher.InvokeAsync(() =>
-        {
-            token.ThrowIfCancellationRequested();
-
-            mediaPlayer.EndReached -= OnEndReached;
-            mediaPlayer.EndReached += OnEndReached;
-
-            using var media = new Media(vlcPlayer, new Uri(path));
-            mediaPlayer.Play(media);
-        });
-    }
-
     private void NavigationTimer_Tick(object? sender, EventArgs e)
     {
         navigationTimer?.Stop();
         ShowCurrentFull();
-    }
-
-    private void OnEndReached(object? sender, EventArgs e)
-    {
-        // Don't block the media player thread.
-        ThreadPool.QueueUserWorkItem(_ =>
-        {
-            Dispatcher.BeginInvoke(() =>
-            {
-                _ = PlayPreviewAsync(tableList[tableIndex].PreviewVideoPath, CancellationToken.None);
-            });
-        });
     }
 
     private void SetLoading(bool isLoading)
@@ -530,8 +489,7 @@ public partial class MainWindow : Window
             // native LibVLC crash when it tries to read a file that has been deleted
             // out from under it.
             playbackCancellation.Cancel();
-            mediaPlayer.EndReached -= OnEndReached;
-            mediaPlayer.Stop();
+            videoPlayer.Stop();
             backglassWindow?.StopVideo();
 
             // Record playfield and backglass videos in parallel (single VPX session).

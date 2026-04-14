@@ -1,18 +1,15 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
-using LibVLCSharp.Shared;
 using Forms = System.Windows.Forms;
 
 namespace VirtualPinballLauncher;
 
 public partial class BackglassWindow : Window
 {
-    private LibVLC vlcPlayer = null!;
-    private MediaPlayer mediaPlayer = null!;
-    private volatile string? currentVideoPath;
+    private LoopingVideoPlayer videoPlayer = null!;
 
     public BackglassWindow()
     {
@@ -20,79 +17,17 @@ public partial class BackglassWindow : Window
 
         Loaded += (_, _) =>
         {
-            vlcPlayer = new LibVLC(
-                "--no-video-title-show",
-                "--no-drop-late-frames",
-                "--no-skip-frames",
-                "--clock-jitter=0");
-            mediaPlayer = new MediaPlayer(vlcPlayer);
-            BackglassPlayer.MediaPlayer = mediaPlayer;
+            videoPlayer = new LoopingVideoPlayer(Dispatcher);
+            BackglassPlayer.MediaPlayer = videoPlayer.MediaPlayer;
         };
 
-        Closed += (_, _) =>
-        {
-            mediaPlayer.Stop();
-            mediaPlayer.Dispose();
-            vlcPlayer.Dispose();
-        };
+        Closed += (_, _) => videoPlayer?.Dispose();
     }
 
-    public void PlayVideo(string path)
-    {
-        if (mediaPlayer is null || vlcPlayer is null)
-            return;
+    public Task PlayBackglassAsync(string? path, CancellationToken token)
+        => videoPlayer.PlayAsync(path, token);
 
-        currentVideoPath = path;
-
-        mediaPlayer.EndReached -= OnEndReached;
-        mediaPlayer.EndReached += OnEndReached;
-
-        var media = new Media(vlcPlayer, new Uri(path));
-        mediaPlayer.Play(media);
-        media.Dispose();
-    }
-
-    public async Task PlayBackglassAsync(string? path, CancellationToken token)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-        {
-            await Dispatcher.InvokeAsync(() => mediaPlayer.Stop());
-            return;
-        }
-
-        var media = new Media(vlcPlayer, new Uri(path));
-
-        token.ThrowIfCancellationRequested();
-
-        await Dispatcher.InvokeAsync(() =>
-        {
-            currentVideoPath = path;
-            mediaPlayer.EndReached -= OnEndReached;
-            mediaPlayer.EndReached += OnEndReached;
-            mediaPlayer.Play(media);
-            media.Dispose();
-        });
-    }
-
-    public void StopVideo()
-    {
-        currentVideoPath = null;
-        mediaPlayer.Stop();
-    }
-
-    private void OnEndReached(object? sender, EventArgs e)
-    {
-        ThreadPool.QueueUserWorkItem(_ =>
-        {
-            Dispatcher.BeginInvoke(() =>
-            {
-                if (!string.IsNullOrWhiteSpace(currentVideoPath) && File.Exists(currentVideoPath))
-                    PlayVideo(currentVideoPath);
-                else
-                    mediaPlayer.Stop();
-            });
-        });
-    }
+    public void StopVideo() => videoPlayer.Stop();
 
     public void SetLoading(bool isLoading)
     {
