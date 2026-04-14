@@ -47,8 +47,8 @@ public sealed class TableStats
 
         SaveTableStats(statsCsvPath, allStats);
 
-        cachedTableStats = null;
-        cachedTableStatsCsvPath = null;
+        cachedTableStats = allStats;
+        cachedTableStatsCsvPath = statsCsvPath;
     }
 
     public string FormatTableStatsForDisplay(TableStatsEntry tableStats)
