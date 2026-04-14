@@ -214,24 +214,16 @@ public sealed class TableStats
         var totalHours = (int)Math.Floor(duration.TotalHours);
         var totalMinutes = duration.Minutes;
 
-        if (totalHours == 0 && totalMinutes == 0)
-            return "0 minutes";
-
         if (totalHours == 0)
-            return totalMinutes == 1
-                ? "1 minute"
-                : $"{totalMinutes} minutes";
+            return Plural(totalMinutes, "minute");
 
         if (totalMinutes == 0)
-            return totalHours == 1
-                ? "1 hour"
-                : $"{totalHours} hours";
+            return Plural(totalHours, "hour");
 
-        var hoursText = totalHours == 1 ? "1 hour" : $"{totalHours} hours";
-        var minutesText = totalMinutes == 1 ? "1 minute" : $"{totalMinutes} minutes";
-
-        return $"{hoursText} {minutesText}";
+        return $"{Plural(totalHours, "hour")} {Plural(totalMinutes, "minute")}";
     }
+
+    private static string Plural(int n, string unit) => $"{n} {unit}{(n == 1 ? "" : "s")}";
 }
 
 public sealed class TableStatsEntry
