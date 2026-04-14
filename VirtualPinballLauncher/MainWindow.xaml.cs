@@ -11,6 +11,7 @@ using System.Windows;
 using System.Windows.Input;
 using MessageBox = System.Windows.MessageBox;
 using Cursors = System.Windows.Input.Cursors;
+using Forms = System.Windows.Forms;
 
 namespace VirtualPinballLauncher;
 
@@ -100,11 +101,11 @@ public partial class MainWindow : Window
         Activated += (_, __) => ForceHideCursor();
 
         dmdWindow = new DmdWindow();
-        dmdWindow.MoveToRightmostMonitor();
+        dmdWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 1);
         dmdWindow.Show();
 
         backglassWindow = new BackglassWindow();
-        backglassWindow.MoveToSecondRightmostMonitor();
+        backglassWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 2);
         backglassWindow.Show();
 
         Focus();
