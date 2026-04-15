@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private LoopingVideoPlayer videoPlayer = null!;
     private DmdWindow? dmdWindow;
     private BackglassWindow? backglassWindow;
+    private readonly List<Window> windows = new();
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
@@ -107,6 +108,10 @@ public partial class MainWindow : Window
         backglassWindow = new BackglassWindow();
         backglassWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 2);
         backglassWindow.Show();
+
+        windows.Add(this);
+        windows.Add(dmdWindow);
+        windows.Add(backglassWindow);
 
         Focus();
 
@@ -327,14 +332,25 @@ public partial class MainWindow : Window
         ShowCurrentFull();
     }
 
-    private void SetLoading(bool isLoading)
+    private void SuspendWindows()
     {
-        LoadingOverlay.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
-        IsHitTestVisible = !isLoading;
+        foreach (var window in windows)
+        {
+            window.Topmost = false;
+            window.SetLoading(true);
+        }
+    }
 
-        // Keep the UI responsive and force a render right away.
-        if (isLoading)
-            Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
+    private void RestoreWindows()
+    {
+        WindowState = WindowState.Maximized;
+        foreach (var window in windows)
+        {
+            window.Show();
+            window.SetLoading(false);
+            window.Topmost = true;
+        }
+        Activate();
     }
 
     private void LaunchSelected()
@@ -364,25 +380,13 @@ public partial class MainWindow : Window
 
         try
         {
-            SetLoading(true);
+            SuspendWindows();
 
             var stopwatch = Stopwatch.StartNew();
             var proc = Process.Start(psi);
 
             if (proc != null)
             {
-                Topmost = false;
-                if (dmdWindow != null)
-                {
-                    dmdWindow.Topmost = false;
-                    dmdWindow.SetLoading(true);
-                }
-                if (backglassWindow != null)
-                {
-                    backglassWindow.Topmost = false;
-                    backglassWindow.SetLoading(true);
-                }
-
                 proc.EnableRaisingEvents = true;
                 proc.Exited += (_, __) =>
                 {
@@ -406,22 +410,8 @@ public partial class MainWindow : Window
                             MessageBox.Show(ex.ToString(), "CSV Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
 
-                        SetLoading(false);
-                        WindowState = WindowState.Maximized;
-                        if (dmdWindow != null)
-                        {
-                            dmdWindow.Show();
-                            dmdWindow.SetLoading(false);
-                            dmdWindow.Topmost = true;
-                        }
-                        if (backglassWindow != null)
-                        {
-                            backglassWindow.SetLoading(false);
-                            backglassWindow.Topmost = true;
-                        }
+                        RestoreWindows();
                         ShowCurrentFull();
-                        Activate();
-                        Topmost = true;
                     });
                 };
 
@@ -460,7 +450,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            SetLoading(false);
+            RestoreWindows();
             MessageBox.Show(ex.ToString(), "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -480,10 +470,7 @@ public partial class MainWindow : Window
 
         try
         {
-            Topmost = false;
-
-            if (backglassWindow != null)
-                backglassWindow.Topmost = false;
+            SuspendWindows();
 
             // Stop playback before recording so LibVLC releases its file handles.
             // Without this, the recorder subprocess's File.Delete calls trigger a
@@ -496,19 +483,12 @@ public partial class MainWindow : Window
             // Record playfield and backglass videos in parallel (single VPX session).
             await RunRecordProcessAsync(self, $"--record \"{table.VpxPath}\"");
 
-            WindowState = WindowState.Maximized;
-            Activate();
-            Topmost = true;
-            if (backglassWindow != null)
-                backglassWindow.Topmost = true;
-
+            RestoreWindows();
             ShowCurrentFull();
         }
         catch (Exception ex)
         {
-            WindowState = WindowState.Maximized;
-            Activate();
-            Topmost = true;
+            RestoreWindows();
             MessageBox.Show(ex.ToString(), "Record Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
