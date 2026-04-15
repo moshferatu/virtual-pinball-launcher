@@ -146,42 +146,22 @@ public static class Recorder
             TryCloseThenKill(p, timeoutMs);
     }
 
-    private static void TryCloseThenKill(Process p, int timeoutMs)
+    private static void TryCloseThenKill(Process process, int timeoutMs)
     {
         try
         {
-            if (p.HasExited) return;
+            if (process.HasExited) return;
 
-            // Attempt graceful shutdown if it has a main window
-            try
-            {
-                if (p.MainWindowHandle != IntPtr.Zero)
-                    p.CloseMainWindow();
-            }
-            catch
-            {
-                // ignore
-            }
+            if (process.MainWindowHandle != IntPtr.Zero)
+                process.CloseMainWindow();
 
-            if (!p.WaitForExit(timeoutMs))
-            {
-                try
-                {
-                    p.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                    // ignore
-                }
-            }
+            if (!process.WaitForExit(timeoutMs))
+                process.Kill(entireProcessTree: true);
         }
-        catch
-        {
-            // ignore any race conditions/access issues
-        }
+        catch { /* ignore */ }
         finally
         {
-            try { p.Dispose(); } catch { /* ignore */ }
+            try { process.Dispose(); } catch { /* ignore */ }
         }
     }
 }
