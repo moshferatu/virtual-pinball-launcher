@@ -50,25 +50,27 @@ public static class Recorder
         var tableName = Path.GetFileNameWithoutExtension(vpxPath);
         var extension = string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension;
         int videoLength = config.RecordSeconds;
+        var playfieldRect = new System.Drawing.Rectangle(0, 0, ScreenSize.PlayfieldWidth, ScreenSize.PlayfieldHeight);
+
+        string FfmpegArgs(System.Drawing.Rectangle rect, string outputFile) =>
+            $"-y -f gdigrab -framerate 120 " +
+            $"-offset_x {rect.Left} -offset_y {rect.Top} " +
+            $"-video_size {rect.Width}x{rect.Height} " +
+            $"-i desktop -t {videoLength} " +
+            $"-vf \"scale=in_range=pc:out_range=tv\" " +
+            $"-c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p " +
+            $"-colorspace bt709 -color_primaries bt709 -color_trc bt709 " +
+            $"\"{outputFile}\"";
 
         // 2) Build and start both ffmpeg captures in parallel.
         var playfieldFile = Path.Combine(config.VideosDirectory, tableName + extension);
         if (File.Exists(playfieldFile))
             File.Delete(playfieldFile);
 
-        var playfieldArgs =
-            $"-y -f gdigrab -framerate 120 " +
-            $"-video_size {ScreenSize.PlayfieldWidth}x{ScreenSize.PlayfieldHeight} " +
-            $"-i desktop -t {videoLength} " +
-            $"-vf \"scale=in_range=pc:out_range=tv\" " +
-            $"-c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p " +
-            $"-colorspace bt709 -color_primaries bt709 -color_trc bt709 " +
-            $"\"{playfieldFile}\"";
-
         var ffmpegPlayfield = Process.Start(new ProcessStartInfo
         {
             FileName = config.FfmpegPath,
-            Arguments = playfieldArgs,
+            Arguments = FfmpegArgs(playfieldRect, playfieldFile),
             UseShellExecute = false,
             CreateNoWindow = true
         }) ?? throw new Exception("Failed to start ffmpeg process for playfield. Check FfmpegPath in config.json.");
@@ -81,20 +83,10 @@ public static class Recorder
             if (File.Exists(backglassFile))
                 File.Delete(backglassFile);
 
-            var backglassArgs =
-                $"-y -f gdigrab -framerate 120 " +
-                $"-offset_x {rect.Left} -offset_y {rect.Top} " +
-                $"-video_size {rect.Width}x{rect.Height} " +
-                $"-i desktop -t {videoLength} " +
-                $"-vf \"scale=in_range=pc:out_range=tv\" " +
-                $"-c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p " +
-                $"-colorspace bt709 -color_primaries bt709 -color_trc bt709 " +
-                $"\"{backglassFile}\"";
-
             ffmpegBackglass = Process.Start(new ProcessStartInfo
             {
                 FileName = config.FfmpegPath,
-                Arguments = backglassArgs,
+                Arguments = FfmpegArgs(rect, backglassFile),
                 UseShellExecute = false,
                 CreateNoWindow = true
             }) ?? throw new Exception("Failed to start ffmpeg process for backglass. Check FfmpegPath in config.json.");
