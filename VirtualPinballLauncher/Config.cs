@@ -1,7 +1,5 @@
-using System;
 using System.IO;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace VirtualPinballLauncher;
 
@@ -16,7 +14,6 @@ public sealed class Config
     public string VideoExtension { get; set; } = ".mp4";
     public int RecordSeconds { get; set; } = 30;
     public int RecordDelaySeconds { get; set; } = 10;
-    public string FfmpegPath { get; set; } = "ffmpeg";
 
     public static async Task<Config> LoadAsync(string path)
     {
