@@ -2,6 +2,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <Platform>x64</Platform>
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
@@ -10,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="LibVLCSharp" Version="3.9.5" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.9.5" />
+    <PackageReference Include="ScreenRecorderLib" Version="6.6.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
   </ItemGroup>
   <ItemGroup>

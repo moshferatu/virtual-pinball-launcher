@@ -19,12 +19,23 @@ static class ScreenSize
 
     public static Rectangle? GetBackglassMonitorBounds()
     {
+        var screen = GetBackglassScreen();
+        return screen?.Bounds;
+    }
+
+    public static string? GetBackglassMonitorDeviceName()
+    {
+        var screen = GetBackglassScreen();
+        return screen?.DeviceName;
+    }
+
+    private static Forms.Screen? GetBackglassScreen()
+    {
         var sorted = Forms.Screen.AllScreens
             .OrderByDescending(s => s.Bounds.Left)
             .ThenBy(s => s.Bounds.Width * s.Bounds.Height)
             .ToArray();
 
-        var screen = sorted.Length >= 2 ? sorted[1] : sorted.FirstOrDefault();
-        return screen?.Bounds;
+        return sorted.Length >= 2 ? sorted[1] : sorted.FirstOrDefault();
     }
 }
