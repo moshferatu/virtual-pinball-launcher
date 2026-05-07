@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private LoopingVideoPlayer videoPlayer = null!;
     private DmdWindow? dmdWindow;
     private BackglassWindow? backglassWindow;
+    private VolumeOverlayWindow? volumeOverlayWindow;
     private readonly List<Window> windows = new();
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -69,6 +70,7 @@ public partial class MainWindow : Window
         {
             dmdWindow?.Close();
             backglassWindow?.Close();
+            volumeOverlayWindow?.Close();
         };
     }
 
@@ -108,6 +110,10 @@ public partial class MainWindow : Window
         backglassWindow = new BackglassWindow();
         backglassWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 2);
         backglassWindow.Show();
+
+        volumeOverlayWindow = new VolumeOverlayWindow();
+        volumeOverlayWindow.MoveToMonitor(0);
+        volumeOverlayWindow.Show();
 
         windows.Add(this);
         windows.Add(dmdWindow);
