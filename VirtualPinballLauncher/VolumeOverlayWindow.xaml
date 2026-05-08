@@ -12,23 +12,35 @@
         Focusable="False">
     <Grid>
         <Border x:Name="VolumePanel"
-                HorizontalAlignment="Center"
                 VerticalAlignment="Bottom"
-                Margin="0,0,0,80"
-                Padding="20,12"
-                Background="#CC000000"
-                BorderBrush="Yellow"
-                BorderThickness="0,4,0,4"
+                Background="Black"
+                BorderBrush="Red"
+                BorderThickness="0,10,0,10"
+                Padding="24"
+                Margin="0,0,0,200"
                 Visibility="Collapsed">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="VOL"
-                           Foreground="Yellow"
-                           FontSize="40"
+            <Grid>
+                <!-- Hidden spacer matches the table name overlay's height so the volume
+                     panel covers it exactly when shown. -->
+                <TextBlock FontSize="250"
                            FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
-                           VerticalAlignment="Center"
-                           Margin="0,0,16,0"/>
-                <StackPanel x:Name="VolumeBars" Orientation="Horizontal" VerticalAlignment="Center"/>
-            </StackPanel>
+                           FontWeight="Normal"
+                           Visibility="Hidden"
+                           Text=" "/>
+                <StackPanel Orientation="Vertical"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="Master Volume"
+                               Foreground="Yellow"
+                               FontSize="125"
+                               FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,24"/>
+                    <StackPanel x:Name="VolumeBars"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </Window>
