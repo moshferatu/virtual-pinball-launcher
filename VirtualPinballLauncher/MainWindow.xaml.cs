@@ -195,8 +195,7 @@ public partial class MainWindow : Window
                 _ = RecordSelectedPreviewAsync();
                 break;
 
-            case Key.D5:
-            case Key.NumPad5:
+            case Key.F12:
                 if (!isRepeat) SelectRandom();
                 break;
 

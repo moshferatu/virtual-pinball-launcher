@@ -16,7 +16,7 @@ public partial class VolumeOverlayWindow : Window
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
 
-    private const int VK_BACK = 0x08;
+    private const int VK_5 = 0x35;
     private const int VK_LEFT = 0x25;
     private const int VK_RIGHT = 0x27;
 
@@ -167,7 +167,7 @@ public partial class VolumeOverlayWindow : Window
             if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
             {
                 var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                bool ctrl = (GetAsyncKeyState(VK_BACK) & 0x8000) != 0;
+                bool ctrl = (GetAsyncKeyState(VK_5) & 0x8000) != 0;
                 if (ctrl)
                 {
                     if (kb.vkCode == VK_LEFT)
