@@ -27,19 +27,10 @@
                            FontWeight="Normal"
                            Visibility="Hidden"
                            Text=" "/>
-                <StackPanel Orientation="Vertical"
+                <StackPanel x:Name="VolumeBars"
+                            Orientation="Horizontal"
                             HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="Master Volume"
-                               Foreground="Yellow"
-                               FontSize="125"
-                               FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,24"/>
-                    <StackPanel x:Name="VolumeBars"
-                                Orientation="Horizontal"
-                                HorizontalAlignment="Center"/>
-                </StackPanel>
+                            VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>

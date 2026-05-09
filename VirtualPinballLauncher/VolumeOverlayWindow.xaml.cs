@@ -84,6 +84,7 @@ public partial class VolumeOverlayWindow : Window
         InitializeComponent();
         BuildBars();
         SourceInitialized += OnSourceInitialized;
+        SizeChanged += (_, _) => UpdateBarDimensions();
         Closed += OnClosed;
     }
 
@@ -93,16 +94,33 @@ public partial class VolumeOverlayWindow : Window
         {
             var rect = new Rectangle
             {
-                Width = 60,
-                Height = 76,
-                Margin = new Thickness(3, 0, 3, 0),
                 Stroke = Brushes.Yellow,
-                StrokeThickness = 4,
                 RadiusX = 2,
                 RadiusY = 2
             };
             bars[i] = rect;
             VolumeBars.Children.Add(rect);
+        }
+    }
+
+    private void UpdateBarDimensions()
+    {
+        if (ActualWidth <= 0) return;
+
+        // The overlay fills the monitor, so ActualWidth is the screen width. Aim
+        // for the bar row to span ~75% of that, then split evenly across all bars.
+        double slot = ActualWidth * 0.75 / BarCount;
+        double margin = slot * 0.05;
+        double barWidth = slot - 2 * margin;
+        double barHeight = barWidth * 2.0;
+        double stroke = barWidth / 15.0;
+
+        foreach (var bar in bars)
+        {
+            bar.Width = barWidth;
+            bar.Height = barHeight;
+            bar.Margin = new Thickness(margin, 0, margin, 0);
+            bar.StrokeThickness = stroke;
         }
     }
 
