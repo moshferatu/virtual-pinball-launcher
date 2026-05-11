@@ -53,6 +53,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource playbackCancellation = new();
     private SoundPlayer? flipperSound;
 
+    private bool launchInProgress;
+
     private void ForceHideCursor()
     {
         if (cursorHidden) return;
@@ -360,6 +362,8 @@ public partial class MainWindow : Window
 
     private void LaunchSelected()
     {
+        if (launchInProgress) return;
+
         var table = tableList[tableIndex];
         if (!File.Exists(config.VpxExePath))
         {
@@ -382,6 +386,8 @@ public partial class MainWindow : Window
             UseShellExecute = false,
             WorkingDirectory = Path.GetDirectoryName(config.VpxExePath) ?? Environment.CurrentDirectory
         };
+
+        launchInProgress = true;
 
         try
         {
@@ -417,6 +423,7 @@ public partial class MainWindow : Window
 
                         RestoreWindows();
                         ShowCurrentFull();
+                        launchInProgress = false;
                     });
                 };
 
@@ -452,10 +459,16 @@ public partial class MainWindow : Window
                     }
                 });
             }
+            else
+            {
+                RestoreWindows();
+                launchInProgress = false;
+            }
         }
         catch (Exception ex)
         {
             RestoreWindows();
+            launchInProgress = false;
             MessageBox.Show(ex.ToString(), "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
