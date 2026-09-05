@@ -13,10 +13,10 @@ public sealed class TableStats
     private const string TableStatsHeader = "Table Name,Times Played,Total Time Spent Playing,Last Date Played";
     private const string LastDateFormat = "MMMM d, yyyy";
 
-    private List<TableStatsEntry>? cachedTableStats;
+    private Dictionary<string, TableStatsEntry>? cachedTableStats;
     private string? cachedTableStatsCsvPath;
 
-    public List<TableStatsEntry> GetAllTableStats(string tablesDirectory)
+    public IReadOnlyDictionary<string, TableStatsEntry> GetAllTableStats(string tablesDirectory)
     {
         var statsCsvPath = GetTableStatsCsvPath(tablesDirectory);
         return GetCachedTableStats(statsCsvPath);
@@ -26,19 +26,19 @@ public sealed class TableStats
     {
         var statsCsvPath = GetTableStatsCsvPath(tablesDirectory);
         var allStats = GetCachedTableStats(statsCsvPath);
-        return FindTableStats(allStats, tableName) ?? new TableStatsEntry(tableName);
+        return allStats.TryGetValue(tableName, out var entry) ? entry : new TableStatsEntry(tableName);
     }
 
     public void UpdateTableStatsAfterPlay(string tablesDirectory, string tableName, TimeSpan elapsedPlayTime)
     {
         var statsCsvPath = GetTableStatsCsvPath(tablesDirectory);
         var allStats = LoadOrCreateTableStats(statsCsvPath);
-        var tableStats = FindTableStats(allStats, tableName);
-
-        if (tableStats is null)
+        var statsByName = IndexTableStats(allStats);
+        if (!statsByName.TryGetValue(tableName, out var tableStats))
         {
             tableStats = new TableStatsEntry(tableName);
             allStats.Add(tableStats);
+            statsByName.Add(tableName, tableStats);
         }
 
         tableStats.TimesPlayed += 1;
@@ -47,7 +47,7 @@ public sealed class TableStats
 
         SaveTableStats(statsCsvPath, allStats);
 
-        cachedTableStats = allStats;
+        cachedTableStats = statsByName;
         cachedTableStatsCsvPath = statsCsvPath;
     }
 
@@ -128,14 +128,23 @@ public sealed class TableStats
         return tableStats;
     }
 
-    private List<TableStatsEntry> GetCachedTableStats(string csvPath)
+    private Dictionary<string, TableStatsEntry> GetCachedTableStats(string csvPath)
     {
         if (cachedTableStats != null && string.Equals(cachedTableStatsCsvPath, csvPath, StringComparison.OrdinalIgnoreCase))
             return cachedTableStats;
 
+        cachedTableStats = IndexTableStats(LoadOrCreateTableStats(csvPath));
         cachedTableStatsCsvPath = csvPath;
-        cachedTableStats = LoadOrCreateTableStats(csvPath);
         return cachedTableStats;
+    }
+
+    private static Dictionary<string, TableStatsEntry> IndexTableStats(IEnumerable<TableStatsEntry> entries)
+    {
+        var index = new Dictionary<string, TableStatsEntry>(StringComparer.OrdinalIgnoreCase);
+        // Keep the first matching row, as before, without dropping duplicate CSV rows on save.
+        foreach (var entry in entries)
+            index.TryAdd(entry.TableName, entry);
+        return index;
     }
 
     private static List<string> ParseCsvLine(string line)
@@ -176,7 +185,7 @@ public sealed class TableStats
         return fields;
     }
 
-    private static void SaveTableStats(string csvPath, List<TableStatsEntry> tableStats)
+    private static void SaveTableStats(string csvPath, IEnumerable<TableStatsEntry> tableStats)
     {
         var lines = new List<string> { TableStatsHeader };
 
@@ -202,11 +211,6 @@ public sealed class TableStats
             return value;
 
         return $"\"{value.Replace("\"", "\"\"")}\"";
-    }
-
-    private static TableStatsEntry? FindTableStats(List<TableStatsEntry> tableStats, string tableName)
-    {
-        return tableStats.FirstOrDefault(s => string.Equals(s.TableName, tableName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string FormatDuration(TimeSpan duration)

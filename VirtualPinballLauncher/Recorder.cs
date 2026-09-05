@@ -35,45 +35,50 @@ public static class Recorder
             WorkingDirectory = Path.GetDirectoryName(config.VpxExePath) ?? Environment.CurrentDirectory
         });
 
-        await Task.Delay(TimeSpan.FromSeconds(config.RecordDelaySeconds));
-
         if (vpx == null)
-            throw new Exception("Failed to start VPX process.");
+            throw new InvalidOperationException("Failed to start VPX process.");
 
-        var tableName = Path.GetFileNameWithoutExtension(vpxPath);
-        var extension = string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension;
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(config.RecordDelaySeconds));
 
-        var playfieldFile = Path.Combine(config.VideosDirectory, tableName + extension);
-        var backglassFile = Path.Combine(config.BackglassVideosDirectory, tableName + extension);
+            var tableName = Path.GetFileNameWithoutExtension(vpxPath);
+            var extension = string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension;
 
-        if (File.Exists(playfieldFile)) File.Delete(playfieldFile);
-        if (File.Exists(backglassFile)) File.Delete(backglassFile);
+            var playfieldFile = Path.Combine(config.VideosDirectory, tableName + extension);
+            var backglassFile = Path.Combine(config.BackglassVideosDirectory, tableName + extension);
 
-        using var playfieldRecorder = CreateScreenRecorder(DisplayRecordingSource.MainMonitor);
-        using var backglassRecorder = CreateScreenRecorder(new DisplayRecordingSource(backglassDeviceName));
+            if (File.Exists(playfieldFile)) File.Delete(playfieldFile);
+            if (File.Exists(backglassFile)) File.Delete(backglassFile);
 
-        var playfieldTcs = new TaskCompletionSource<bool>();
-        var backglassTcs = new TaskCompletionSource<bool>();
+            using var playfieldRecorder = CreateScreenRecorder(DisplayRecordingSource.MainMonitor);
+            using var backglassRecorder = CreateScreenRecorder(new DisplayRecordingSource(backglassDeviceName));
 
-        playfieldRecorder.OnRecordingComplete += (s, e) => playfieldTcs.TrySetResult(true);
-        playfieldRecorder.OnRecordingFailed += (s, e) =>
-            playfieldTcs.TrySetException(new Exception($"Playfield recording failed: {e.Error}"));
+            var playfieldTcs = new TaskCompletionSource<bool>();
+            var backglassTcs = new TaskCompletionSource<bool>();
 
-        backglassRecorder.OnRecordingComplete += (s, e) => backglassTcs.TrySetResult(true);
-        backglassRecorder.OnRecordingFailed += (s, e) =>
-            backglassTcs.TrySetException(new Exception($"Backglass recording failed: {e.Error}"));
+            playfieldRecorder.OnRecordingComplete += (s, e) => playfieldTcs.TrySetResult(true);
+            playfieldRecorder.OnRecordingFailed += (s, e) =>
+                playfieldTcs.TrySetException(new Exception($"Playfield recording failed: {e.Error}"));
 
-        playfieldRecorder.Record(playfieldFile);
-        backglassRecorder.Record(backglassFile);
+            backglassRecorder.OnRecordingComplete += (s, e) => backglassTcs.TrySetResult(true);
+            backglassRecorder.OnRecordingFailed += (s, e) =>
+                backglassTcs.TrySetException(new Exception($"Backglass recording failed: {e.Error}"));
 
-        await Task.Delay(TimeSpan.FromSeconds(config.RecordSeconds));
+            playfieldRecorder.Record(playfieldFile);
+            backglassRecorder.Record(backglassFile);
 
-        playfieldRecorder.Stop();
-        backglassRecorder.Stop();
+            await Task.Delay(TimeSpan.FromSeconds(config.RecordSeconds));
 
-        await Task.WhenAll(playfieldTcs.Task, backglassTcs.Task);
+            playfieldRecorder.Stop();
+            backglassRecorder.Stop();
 
-        await StopVpxAndRelatedAsync(vpx);
+            await Task.WhenAll(playfieldTcs.Task, backglassTcs.Task);
+        }
+        finally
+        {
+            await StopVpxAndRelatedAsync(vpx);
+        }
     }
 
     private static ScreenRecorderLib.Recorder CreateScreenRecorder(DisplayRecordingSource displaySource)

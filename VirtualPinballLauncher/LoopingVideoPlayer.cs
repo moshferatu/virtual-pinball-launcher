@@ -13,6 +13,7 @@ public sealed class LoopingVideoPlayer : IDisposable
     private readonly MediaPlayer mediaPlayer;
     private readonly Dispatcher dispatcher;
     private volatile string? currentPath;
+    private bool disposed;
 
     public MediaPlayer MediaPlayer => mediaPlayer;
 
@@ -30,34 +31,35 @@ public sealed class LoopingVideoPlayer : IDisposable
 
     public async Task PlayAsync(string? path, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-        {
-            currentPath = null;
-            await dispatcher.InvokeAsync(() => mediaPlayer.Stop());
-            return;
-        }
-
         token.ThrowIfCancellationRequested();
-
-        var media = new Media(libVlc, new Uri(path));
-
         await dispatcher.InvokeAsync(() =>
         {
             token.ThrowIfCancellationRequested();
+            if (disposed) return;
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                Stop();
+                return;
+            }
+
+            using var media = new Media(libVlc, new Uri(path));
             currentPath = path;
             mediaPlayer.Play(media);
-            media.Dispose();
         });
     }
 
     public void Stop()
     {
+        if (disposed) return;
         currentPath = null;
         mediaPlayer.Stop();
     }
 
     public void Dispose()
     {
+        if (disposed) return;
+        disposed = true;
+        currentPath = null;
         mediaPlayer.EndReached -= OnEndReached;
         mediaPlayer.Stop();
         mediaPlayer.Dispose();
@@ -67,22 +69,15 @@ public sealed class LoopingVideoPlayer : IDisposable
     private void OnEndReached(object? sender, EventArgs e)
     {
         // Don't block the media player thread.
-        ThreadPool.QueueUserWorkItem(_ =>
+        var path = currentPath;
+        dispatcher.BeginInvoke(() =>
         {
-            dispatcher.BeginInvoke(() =>
+            if (disposed || path != currentPath) return;
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
             {
-                var path = currentPath;
-                if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                {
-                    var media = new Media(libVlc, new Uri(path));
-                    mediaPlayer.Play(media);
-                    media.Dispose();
-                }
-                else
-                {
-                    mediaPlayer.Stop();
-                }
-            });
+                using var media = new Media(libVlc, new Uri(path));
+                mediaPlayer.Play(media);
+            }
         });
     }
 }

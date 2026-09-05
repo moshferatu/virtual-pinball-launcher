@@ -24,5 +24,5 @@ public partial class BackglassWindow : Window
     public Task PlayBackglassAsync(string? path, CancellationToken token)
         => videoPlayer.PlayAsync(path, token);
 
-    public void StopVideo() => videoPlayer.Stop();
+    public void StopVideo() => videoPlayer?.Stop();
 }

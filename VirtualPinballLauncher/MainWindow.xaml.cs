@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     private DmdWindow? dmdWindow;
     private BackglassWindow? backglassWindow;
     private VolumeOverlayWindow? volumeOverlayWindow;
-    private readonly List<Window> windows = new();
+    private readonly List<(Window Window, LoadingOverlay Overlay)> windows = new();
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
@@ -47,13 +47,13 @@ public partial class MainWindow : Window
 
     private bool cursorHidden;
 
-    private System.Windows.Threading.DispatcherTimer? navigationTimer;
-    private long navigationGeneration;
+    private string? previewTablePath;
 
     private CancellationTokenSource playbackCancellation = new();
     private SoundPlayer? flipperSound;
 
     private bool launchInProgress;
+    private bool isClosed;
 
     private void ForceHideCursor()
     {
@@ -70,6 +70,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         Closed += (_, __) =>
         {
+            isClosed = true;
+            StopPreviews();
+            playbackCancellation.Dispose();
+            videoPlayer?.Dispose();
+            flipperSound?.Dispose();
             dmdWindow?.Close();
             backglassWindow?.Close();
             volumeOverlayWindow?.Close();
@@ -98,6 +103,7 @@ public partial class MainWindow : Window
             await Task.Run(() => flipperSound.Load());
         }
 
+        if (isClosed) return;
         WindowState = WindowState.Maximized;
         Topmost = true;
 
@@ -117,21 +123,16 @@ public partial class MainWindow : Window
         volumeOverlayWindow.MoveToMonitor(0);
         volumeOverlayWindow.Show();
 
-        windows.Add(this);
-        windows.Add(dmdWindow);
-        windows.Add(backglassWindow);
+        windows.Add((this, LoadingOverlay));
+        windows.Add((dmdWindow, dmdWindow.LoadingOverlay));
+        windows.Add((backglassWindow, backglassWindow.LoadingOverlay));
 
         Focus();
-
-        navigationTimer = new System.Windows.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(5)
-        };
-        navigationTimer.Tick += NavigationTimer_Tick;
 
         try
         {
             config = await Config.LoadAsync(Config.DefaultPath);
+            if (isClosed) return;
             tableList = TableScanner.Scan(config).ToList();
             SortTableList();
 
@@ -143,7 +144,7 @@ public partial class MainWindow : Window
             }
 
             tableIndex = 0;
-            ShowCurrentFull();
+            await RefreshPreviewAsync();
         }
         catch (Exception ex)
         {
@@ -154,19 +155,21 @@ public partial class MainWindow : Window
 
     private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (tableList.Count == 0) return;
+        if (isClosed || launchInProgress || tableList.Count == 0) return;
 
         if (e.Delta < 0) Next();
         else Prev();
     }
 
-    private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private async void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (tableList.Count == 0)
         {
             if (e.Key == Key.Escape) Close();
             return;
         }
+
+        if (isClosed || launchInProgress) return;
 
         bool isRepeat = e.IsRepeat;
 
@@ -190,11 +193,11 @@ public partial class MainWindow : Window
             case Key.Space:
             case Key.D1:
             case Key.NumPad1:
-                LaunchSelected();
+                await LaunchSelectedAsync();
                 break;
 
             case Key.R:
-                _ = RecordSelectedPreviewAsync();
+                await RecordSelectedPreviewAsync();
                 break;
 
             case Key.F12:
@@ -212,35 +215,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Window_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (tableList.Count == 0) return;
-
-        switch (e.Key)
-        {
-            case Key.Down:
-            case Key.Right:
-            case Key.RightShift:
-            case Key.PageDown:
-            case Key.Up:
-            case Key.Left:
-            case Key.LeftShift:
-            case Key.PageUp:
-                if (navigationTimer?.IsEnabled != true)
-                    ShowCurrentFull();
-                break;
-        }
-    }
-
     private void SortTableList()
     {
         if (sortByPopularity)
         {
             var allStats = tableStats.GetAllTableStats(config.TablesDirectory);
             tableList = tableList
-                .OrderByDescending(t => allStats
-                    .FirstOrDefault(s => string.Equals(s.TableName, t.DisplayName, StringComparison.OrdinalIgnoreCase))
-                    ?.TotalTimeSpentPlaying ?? TimeSpan.Zero)
+                .OrderByDescending(t => allStats.TryGetValue(t.DisplayName, out var stats) ? stats.TotalTimeSpentPlaying : TimeSpan.Zero)
                 .ThenBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
@@ -252,7 +233,7 @@ public partial class MainWindow : Window
 
     private void ToggleSortMode()
     {
-        if (tableList.Count == 0) return;
+        if (isClosed || launchInProgress || tableList.Count == 0) return;
 
         var currentTableName = tableList[tableIndex].DisplayName;
         sortByPopularity = !sortByPopularity;
@@ -261,14 +242,14 @@ public partial class MainWindow : Window
         tableIndex = tableList.FindIndex(t => string.Equals(t.DisplayName, currentTableName, StringComparison.OrdinalIgnoreCase));
         if (tableIndex < 0) tableIndex = 0;
 
-        ShowCurrentFull();
+        _ = RefreshPreviewAsync();
     }
 
     private void SelectRandom()
     {
         tableIndex = random.Next(tableList.Count);
-        Task.Run(() => flipperSound?.Play());
-        ShowCurrentFull();
+        flipperSound?.Play();
+        _ = RefreshPreviewAsync();
     }
 
     private void Next(bool isRepeat = false)
@@ -285,35 +266,17 @@ public partial class MainWindow : Window
 
     private void ShowCurrent(bool isRepeat = false)
     {
-        var table = tableList[tableIndex];
-        TableNameText.Text = table.DisplayName;
-
         if (!isRepeat)
-            Task.Run(() => flipperSound?.Play());
-
-        Interlocked.Increment(ref navigationGeneration);
-
-        playbackCancellation.Cancel();
-
-        if (navigationTimer != null && !isRepeat)
-        {
-            navigationTimer.Stop();
-            navigationTimer.Start();
-        }
+            flipperSound?.Play();
+        _ = RefreshPreviewAsync(delay: true);
     }
 
-    private async void ShowCurrentFull()
+    private async Task RefreshPreviewAsync(bool delay = false, bool force = false)
     {
-        var expectedGeneration = Interlocked.Read(ref navigationGeneration);
+        if (isClosed || tableList.Count == 0) return;
 
         var table = tableList[tableIndex];
         TableNameText.Text = table.DisplayName;
-
-        var tableStatsEntry = tableStats.GetTableStatsForDisplay(config.TablesDirectory, table.DisplayName);
-
-        if (Interlocked.Read(ref navigationGeneration) != expectedGeneration)
-            return;
-
         playbackCancellation.Cancel();
         playbackCancellation.Dispose();
         playbackCancellation = new CancellationTokenSource();
@@ -321,46 +284,61 @@ public partial class MainWindow : Window
 
         try
         {
-            // Kick both preparations concurrently
-            var playfieldTask = videoPlayer.PlayAsync(table.PreviewVideoPath, token);
-            var backglassTask = backglassWindow != null
-                ? backglassWindow.PlayBackglassAsync(table.BackglassVideoPath, token)
-                : Task.CompletedTask;
+            // Wait for navigation to settle before starting either decoder.
+            if (delay)
+                await Task.Delay(100, token);
+            token.ThrowIfCancellationRequested();
 
-            dmdWindow?.ShowTableProperties(table.DisplayName, tableStats.FormatTableStatsForDisplay(tableStatsEntry));
-            await Task.WhenAll(playfieldTask, backglassTask);
+            var stats = tableStats.GetTableStatsForDisplay(config.TablesDirectory, table.DisplayName);
+            dmdWindow?.ShowTableProperties(table.DisplayName, tableStats.FormatTableStatsForDisplay(stats));
+            if (!force && previewTablePath == table.VpxPath) return;
+
+            previewTablePath = null;
+            await Task.WhenAll(
+                videoPlayer.PlayAsync(table.PreviewVideoPath, token),
+                backglassWindow?.PlayBackglassAsync(table.BackglassVideoPath, token) ?? Task.CompletedTask);
+            token.ThrowIfCancellationRequested();
+            previewTablePath = table.VpxPath;
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            if (!isClosed && !token.IsCancellationRequested)
+                MessageBox.Show(ex.ToString(), "Preview Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
-    private void NavigationTimer_Tick(object? sender, EventArgs e)
+    private void StopPreviews()
     {
-        navigationTimer?.Stop();
-        ShowCurrentFull();
+        previewTablePath = null;
+        playbackCancellation.Cancel();
+        videoPlayer?.Stop();
+        backglassWindow?.StopVideo();
     }
 
     private void SuspendWindows()
     {
-        foreach (var window in windows)
+        foreach (var (window, overlay) in windows)
         {
             window.Topmost = false;
-            window.SetLoading(true);
+            overlay.SetLoading(true);
         }
     }
 
     private void RestoreWindows()
     {
+        if (isClosed) return;
         WindowState = WindowState.Maximized;
-        foreach (var window in windows)
+        foreach (var (window, overlay) in windows)
         {
             window.Show();
-            window.SetLoading(false);
+            overlay.SetLoading(false);
             window.Topmost = true;
         }
         Activate();
     }
 
-    private void LaunchSelected()
+    private async Task LaunchSelectedAsync()
     {
         if (launchInProgress) return;
 
@@ -391,94 +369,87 @@ public partial class MainWindow : Window
 
         try
         {
+            // Finish any pending navigation refresh before handing off to VPX.
+            // Keep both previews playing underneath it so returning needs no reload.
+            await RefreshPreviewAsync();
+            if (isClosed) return;
             SuspendWindows();
 
             var stopwatch = Stopwatch.StartNew();
-            var proc = Process.Start(psi);
-
-            if (proc != null)
+            using var process = Process.Start(psi)
+                ?? throw new InvalidOperationException("Failed to start VPX.");
+            using var focusCancellation = new CancellationTokenSource();
+            var focusTask = FocusPlayerWindowAsync(process, focusCancellation.Token);
+            try
             {
-                proc.EnableRaisingEvents = true;
-                proc.Exited += (_, __) =>
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        stopwatch.Stop();
-
-                        try
-                        {
-                            tableStats.UpdateTableStatsAfterPlay(config.TablesDirectory, table.DisplayName, stopwatch.Elapsed);
-
-                            if (sortByPopularity)
-                            {
-                                SortTableList();
-                                tableIndex = tableList.FindIndex(t => string.Equals(t.DisplayName, table.DisplayName, StringComparison.OrdinalIgnoreCase));
-                                if (tableIndex < 0) tableIndex = 0;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show(ex.ToString(), "CSV Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        }
-
-                        RestoreWindows();
-                        ShowCurrentFull();
-                        launchInProgress = false;
-                    });
-                };
-
-                // Poll for the player window and focus it
-                _ = Task.Run(async () =>
-                {
-                    const string targetTitle = "Visual Pinball Player";
-                    bool playfieldWindowFound = false;
-                    IntPtr hwnd = IntPtr.Zero;
-
-                    // Poll for up to ~30 seconds
-                    for (int i = 0; i < 60; i++)
-                    {
-                        await Task.Delay(500);
-                        if (proc.HasExited) return;
-
-                        hwnd = FindWindow(null, targetTitle);
-                        if (hwnd != IntPtr.Zero)
-                        {
-                            playfieldWindowFound = true;
-                            break;
-                        }
-                    }
-
-                    if (playfieldWindowFound)
-                    {
-                        // Small extra delay to let the window finish initializing
-                        await Task.Delay(1000);
-                        if (dmdWindow != null)
-                            Dispatcher.Invoke(() => dmdWindow.Hide());
-                        ShowWindow(hwnd, SW_RESTORE);
-                        SetForegroundWindow(hwnd);
-                    }
-                });
+                await process.WaitForExitAsync();
             }
-            else
+            finally
             {
-                RestoreWindows();
-                launchInProgress = false;
+                focusCancellation.Cancel();
+                await focusTask;
+            }
+            stopwatch.Stop();
+
+            try
+            {
+                tableStats.UpdateTableStatsAfterPlay(config.TablesDirectory, table.DisplayName, stopwatch.Elapsed);
+                if (sortByPopularity)
+                {
+                    SortTableList();
+                    tableIndex = Math.Max(0, tableList.FindIndex(t =>
+                        string.Equals(t.DisplayName, table.DisplayName, StringComparison.OrdinalIgnoreCase)));
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "CSV Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         catch (Exception ex)
         {
-            RestoreWindows();
-            launchInProgress = false;
             MessageBox.Show(ex.ToString(), "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+        finally
+        {
+            launchInProgress = false;
+            RestoreWindows();
+            await RefreshPreviewAsync();
+        }
+    }
+
+    private async Task FocusPlayerWindowAsync(Process process, CancellationToken token)
+    {
+        try
+        {
+            for (int i = 0; i < 60; i++)
+            {
+                await Task.Delay(500, token);
+                if (isClosed || process.HasExited) return;
+                var hwnd = FindWindow(null, "Visual Pinball Player");
+                if (hwnd == IntPtr.Zero) continue;
+
+                await Task.Delay(1000, token);
+                if (isClosed || process.HasExited) return;
+                dmdWindow?.Hide();
+                ShowWindow(hwnd, SW_RESTORE);
+                SetForegroundWindow(hwnd);
+                // Leave the previews unobscured behind VPX, ready for its exit.
+                foreach (var (_, overlay) in windows)
+                    overlay.SetLoading(false);
+                return;
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
     private async Task RecordSelectedPreviewAsync()
     {
+        if (isClosed || launchInProgress) return;
         var table = tableList[tableIndex];
 
         // Run the same executable in record mode so there is no need to ship extra runtime files.
-        var self = Process.GetCurrentProcess().MainModule?.FileName;
+        var self = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(self) || !File.Exists(self))
         {
             MessageBox.Show("Could not determine executable path for record mode.", "Record Error",
@@ -486,49 +457,37 @@ public partial class MainWindow : Window
             return;
         }
 
+        launchInProgress = true;
         try
         {
+            // Release preview file handles before the recorder replaces the videos.
+            StopPreviews();
             SuspendWindows();
-
-            // Stop playback before recording so LibVLC releases its file handles.
-            // Without this, the recorder subprocess's File.Delete calls trigger a
-            // native LibVLC crash when it tries to read a file that has been deleted
-            // out from under it.
-            playbackCancellation.Cancel();
-            videoPlayer.Stop();
-            backglassWindow?.StopVideo();
-
-            // Record playfield and backglass videos in parallel (single VPX session).
             await RunRecordProcessAsync(self, $"--record \"{table.VpxPath}\"");
-
-            RestoreWindows();
-            ShowCurrentFull();
         }
         catch (Exception ex)
         {
-            RestoreWindows();
             MessageBox.Show(ex.ToString(), "Record Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            launchInProgress = false;
+            RestoreWindows();
+            await RefreshPreviewAsync(force: true);
         }
     }
 
-    private static Task RunRecordProcessAsync(string exePath, string arguments)
+    private static async Task RunRecordProcessAsync(string exePath, string arguments)
     {
-        var tcs = new TaskCompletionSource();
-        var proc = Process.Start(new ProcessStartInfo
+        using var process = Process.Start(new ProcessStartInfo
         {
             FileName = exePath,
             Arguments = arguments,
             UseShellExecute = false
-        });
+        }) ?? throw new InvalidOperationException("Failed to start the recorder.");
 
-        if (proc is null)
-        {
-            tcs.SetResult();
-            return tcs.Task;
-        }
-
-        proc.EnableRaisingEvents = true;
-        proc.Exited += (_, _) => tcs.SetResult();
-        return tcs.Task;
+        await process.WaitForExitAsync();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Recording failed (exit code {process.ExitCode}).");
     }
 }

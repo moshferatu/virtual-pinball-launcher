@@ -7,15 +7,6 @@ namespace VirtualPinballLauncher;
 
 public static class WindowUtils
 {
-    public static void SetLoading(this Window window, bool isLoading)
-    {
-        var overlay = (UIElement)window.FindName("LoadingOverlay");
-        overlay.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
-
-        if (isLoading)
-            window.Dispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
-    }
-
     public static void MoveToMonitor(this Window window, int index)
     {
         var sorted = Forms.Screen.AllScreens
