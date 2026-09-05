@@ -1,6 +1,5 @@
+using System.Globalization;
 using System.Windows;
-using System.Windows.Documents;
-using System.Windows.Media;
 
 namespace VirtualPinballLauncher;
 
@@ -11,33 +10,29 @@ public partial class DmdWindow : Window
         InitializeComponent();
     }
 
-    private static readonly SolidColorBrush LabelBrush = new(Colors.DimGray);
-    private static readonly SolidColorBrush ValueBrush = new(Colors.White);
-
-    public void ShowTableProperties(string tableDisplayName, string propertiesDisplayText)
+    public void ShowTableProperties(string tableDisplayName, TableStatsEntry? stats)
     {
         TableTitleText.Text = tableDisplayName;
-        PropertiesText.Inlines.Clear();
-
-        if (string.IsNullOrEmpty(propertiesDisplayText))
-            return;
-
-        var lines = propertiesDisplayText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        for (var i = 0; i < lines.Length; i++)
-        {
-            var colonIndex = lines[i].IndexOf(": ");
-            if (colonIndex >= 0)
-            {
-                PropertiesText.Inlines.Add(new Run(lines[i][..(colonIndex + 2)]) { Foreground = LabelBrush });
-                PropertiesText.Inlines.Add(new Run(lines[i][(colonIndex + 2)..]) { Foreground = ValueBrush });
-            }
-            else
-            {
-                PropertiesText.Inlines.Add(new Run(lines[i]) { Foreground = ValueBrush });
-            }
-
-            if (i < lines.Length - 1)
-                PropertiesText.Inlines.Add(new LineBreak());
-        }
+        PropertiesText.Visibility = stats == null ? Visibility.Collapsed : Visibility.Visible;
+        TimesPlayedValue.Text = stats?.TimesPlayed.ToString(CultureInfo.CurrentCulture) ?? "";
+        TotalTimePlayedValue.Text = stats == null ? "" : FormatDuration(stats.TotalTimeSpentPlaying);
+        LastPlayedValue.Text = stats == null ? "" :
+            stats.LastDatePlayed?.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture) ?? "Never";
     }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        var totalHours = (int)Math.Floor(duration.TotalHours);
+        var totalMinutes = duration.Minutes;
+
+        if (totalHours == 0)
+            return Plural(totalMinutes, "minute");
+
+        if (totalMinutes == 0)
+            return Plural(totalHours, "hour");
+
+        return $"{Plural(totalHours, "hour")} {Plural(totalMinutes, "minute")}";
+    }
+
+    private static string Plural(int n, string unit) => $"{n} {unit}{(n == 1 ? "" : "s")}";
 }

@@ -51,20 +51,6 @@ public sealed class TableStats
         cachedTableStatsCsvPath = statsCsvPath;
     }
 
-    public string FormatTableStatsForDisplay(TableStatsEntry tableStats)
-    {
-        var lastPlayedText = tableStats.LastDatePlayed.HasValue
-            ? tableStats.LastDatePlayed.Value.ToString(LastDateFormat, CultureInfo.InvariantCulture)
-            : "Never";
-
-        return string.Join(Environment.NewLine, new[]
-        {
-            $"Times Played: {tableStats.TimesPlayed}",
-            $"Total Time Played: {FormatDuration(tableStats.TotalTimeSpentPlaying)}",
-            $"Last Played: {lastPlayedText}"
-        });
-    }
-
     private static string GetTableStatsCsvPath(string tablesDirectory)
     {
         var baseDirectory = string.IsNullOrWhiteSpace(tablesDirectory)
@@ -212,22 +198,6 @@ public sealed class TableStats
 
         return $"\"{value.Replace("\"", "\"\"")}\"";
     }
-
-    private static string FormatDuration(TimeSpan duration)
-    {
-        var totalHours = (int)Math.Floor(duration.TotalHours);
-        var totalMinutes = duration.Minutes;
-
-        if (totalHours == 0)
-            return Plural(totalMinutes, "minute");
-
-        if (totalMinutes == 0)
-            return Plural(totalHours, "hour");
-
-        return $"{Plural(totalHours, "hour")} {Plural(totalMinutes, "minute")}";
-    }
-
-    private static string Plural(int n, string unit) => $"{n} {unit}{(n == 1 ? "" : "s")}";
 }
 
 public sealed class TableStatsEntry

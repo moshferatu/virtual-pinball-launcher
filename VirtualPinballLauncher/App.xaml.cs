@@ -10,6 +10,7 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         // CLI Mode: Record playfield and backglass videos for a specific table.
         // VirtualPinballLauncher.exe --record "D:\Pinball\Tables\Table.vpx"
@@ -31,7 +32,24 @@ public partial class App : System.Windows.Application
             }
         }
 
-        // Launcher Mode: Show the main window.
-        new MainWindow().Show();
+        // Keep the dispatcher alive until the views close and native playback is disposed.
+        var exitCode = 0;
+        try
+        {
+            await using var previews = await PreviewPlayback.CreateAsync();
+            var window = new MainWindow(previews);
+            MainWindow = window;
+            var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            window.Closed += (_, _) => closed.TrySetResult();
+            window.Show();
+            await closed.Task;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.ToString(), "Launcher Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            exitCode = 1;
+        }
+
+        Shutdown(exitCode);
     }
 }

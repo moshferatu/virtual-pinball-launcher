@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -24,7 +25,7 @@ public partial class MainWindow : Window
     private bool sortByPopularity = true;
     private readonly Random random = new();
 
-    private LoopingVideoPlayer videoPlayer = null!;
+    private readonly PreviewPlayback previews;
     private DmdWindow? dmdWindow;
     private BackglassWindow? backglassWindow;
     private VolumeOverlayWindow? volumeOverlayWindow;
@@ -54,6 +55,8 @@ public partial class MainWindow : Window
 
     private bool launchInProgress;
     private bool isClosed;
+    private bool readyToClose;
+    private Task soundLoad = Task.CompletedTask;
 
     private void ForceHideCursor()
     {
@@ -65,42 +68,53 @@ public partial class MainWindow : Window
         cursorHidden = true;
     }
 
-    public MainWindow()
+    public MainWindow(PreviewPlayback previews)
     {
+        this.previews = previews;
         InitializeComponent();
-        Closed += (_, __) =>
+        PreviewPlayer.MediaPlayer = previews.Playfield.MediaPlayer;
+    }
+
+    protected override async void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        if (readyToClose) return;
+        e.Cancel = true;
+        if (isClosed) return;
+        isClosed = true;
+        await Task.Yield();
+
+        try
         {
-            isClosed = true;
-            StopPreviews();
+            await StopPreviewsAsync();
+            await soundLoad;
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError($"Launcher shutdown failed: {ex}");
+        }
+        finally
+        {
+            PreviewPlayer.MediaPlayer = null;
+            backglassWindow?.DetachPlayer();
             playbackCancellation.Dispose();
-            videoPlayer?.Dispose();
             flipperSound?.Dispose();
             dmdWindow?.Close();
             backglassWindow?.Close();
             volumeOverlayWindow?.Close();
-        };
+            readyToClose = true;
+            Close();
+        }
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            videoPlayer = new LoopingVideoPlayer(Dispatcher);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.ToString(), "VLC Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            Close();
-            return;
-        }
-
-        PreviewPlayer.MediaPlayer = videoPlayer.MediaPlayer;
-
         var wavPath = Path.Combine(AppContext.BaseDirectory, "flipper.wav");
         if (File.Exists(wavPath))
         {
             flipperSound = new SoundPlayer(wavPath);
-            await Task.Run(() => flipperSound.Load());
+            soundLoad = Task.Run(() => flipperSound.Load());
+            await soundLoad;
         }
 
         if (isClosed) return;
@@ -115,7 +129,7 @@ public partial class MainWindow : Window
         dmdWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 1);
         dmdWindow.Show();
 
-        backglassWindow = new BackglassWindow();
+        backglassWindow = new BackglassWindow(previews.Backglass);
         backglassWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 2);
         backglassWindow.Show();
 
@@ -139,7 +153,7 @@ public partial class MainWindow : Window
             if (tableList.Count == 0)
             {
                 TableNameText.Text = "No VPX tables found. Check config.json TablesDirectory.";
-                dmdWindow?.ShowTableProperties("No Table Selected", "");
+                dmdWindow?.ShowTableProperties("No Table Selected", null);
                 return;
             }
 
@@ -290,13 +304,13 @@ public partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
 
             var stats = tableStats.GetTableStatsForDisplay(config.TablesDirectory, table.DisplayName);
-            dmdWindow?.ShowTableProperties(table.DisplayName, tableStats.FormatTableStatsForDisplay(stats));
+            dmdWindow?.ShowTableProperties(table.DisplayName, stats);
             if (!force && previewTablePath == table.VpxPath) return;
 
             previewTablePath = null;
             await Task.WhenAll(
-                videoPlayer.PlayAsync(table.PreviewVideoPath, token),
-                backglassWindow?.PlayBackglassAsync(table.BackglassVideoPath, token) ?? Task.CompletedTask);
+                previews.Playfield.PlayAsync(table.PreviewVideoPath, token),
+                previews.Backglass.PlayAsync(table.BackglassVideoPath, token));
             token.ThrowIfCancellationRequested();
             previewTablePath = table.VpxPath;
         }
@@ -308,12 +322,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void StopPreviews()
+    private Task StopPreviewsAsync()
     {
         previewTablePath = null;
         playbackCancellation.Cancel();
-        videoPlayer?.Stop();
-        backglassWindow?.StopVideo();
+        return Task.WhenAll(previews.Playfield.StopAsync(), previews.Backglass.StopAsync());
     }
 
     private void SuspendWindows()
@@ -461,8 +474,9 @@ public partial class MainWindow : Window
         try
         {
             // Release preview file handles before the recorder replaces the videos.
-            StopPreviews();
             SuspendWindows();
+            await StopPreviewsAsync();
+            if (isClosed) return;
             await RunRecordProcessAsync(self, $"--record \"{table.VpxPath}\"");
         }
         catch (Exception ex)

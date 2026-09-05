@@ -32,6 +32,14 @@ dotnet build
 
 The app targets `net8.0-windows` and uses WPF.
 
+Run the regression checks with:
+
+```bash
+dotnet run --project tests/LauncherChecks
+```
+
+These cover stats, DMD formatting, queued playback, native VLC looping and shutdown, and preview-file replacement failures. Playback checks use silent audio with dummy outputs; they do not launch VPX or record the desktop.
+
 ## Configuration
 
 On first launch, the app creates `config.json` next to the executable if it does not already exist. Update that file before using the launcher.

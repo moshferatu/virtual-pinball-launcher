@@ -48,37 +48,39 @@ public static class Recorder
             var playfieldFile = Path.Combine(config.VideosDirectory, tableName + extension);
             var backglassFile = Path.Combine(config.BackglassVideosDirectory, tableName + extension);
 
-            if (File.Exists(playfieldFile)) File.Delete(playfieldFile);
-            if (File.Exists(backglassFile)) File.Delete(backglassFile);
-
-            using var playfieldRecorder = CreateScreenRecorder(DisplayRecordingSource.MainMonitor);
-            using var backglassRecorder = CreateScreenRecorder(new DisplayRecordingSource(backglassDeviceName));
-
-            var playfieldTcs = new TaskCompletionSource<bool>();
-            var backglassTcs = new TaskCompletionSource<bool>();
-
-            playfieldRecorder.OnRecordingComplete += (s, e) => playfieldTcs.TrySetResult(true);
-            playfieldRecorder.OnRecordingFailed += (s, e) =>
-                playfieldTcs.TrySetException(new Exception($"Playfield recording failed: {e.Error}"));
-
-            backglassRecorder.OnRecordingComplete += (s, e) => backglassTcs.TrySetResult(true);
-            backglassRecorder.OnRecordingFailed += (s, e) =>
-                backglassTcs.TrySetException(new Exception($"Backglass recording failed: {e.Error}"));
-
-            playfieldRecorder.Record(playfieldFile);
-            backglassRecorder.Record(backglassFile);
-
-            await Task.Delay(TimeSpan.FromSeconds(config.RecordSeconds));
-
-            playfieldRecorder.Stop();
-            backglassRecorder.Stop();
-
-            await Task.WhenAll(playfieldTcs.Task, backglassTcs.Task);
+            await RecordedPreview.RecordPairAsync(playfieldFile, backglassFile,
+                (playfieldTemp, backglassTemp) => RecordScreensAsync(config, backglassDeviceName, playfieldTemp, backglassTemp));
         }
         finally
         {
             await StopVpxAndRelatedAsync(vpx);
         }
+    }
+
+    private static async Task RecordScreensAsync(Config config, string backglassDeviceName,
+        string playfieldFile, string backglassFile)
+    {
+        using var playfieldRecorder = CreateScreenRecorder(DisplayRecordingSource.MainMonitor);
+        using var backglassRecorder = CreateScreenRecorder(new DisplayRecordingSource(backglassDeviceName));
+        var playfieldTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backglassTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        playfieldRecorder.OnRecordingComplete += (s, e) => playfieldTcs.TrySetResult(true);
+        playfieldRecorder.OnRecordingFailed += (s, e) =>
+            playfieldTcs.TrySetException(new Exception($"Playfield recording failed: {e.Error}"));
+
+        backglassRecorder.OnRecordingComplete += (s, e) => backglassTcs.TrySetResult(true);
+        backglassRecorder.OnRecordingFailed += (s, e) =>
+            backglassTcs.TrySetException(new Exception($"Backglass recording failed: {e.Error}"));
+
+        playfieldRecorder.Record(playfieldFile);
+        backglassRecorder.Record(backglassFile);
+
+        await Task.Delay(TimeSpan.FromSeconds(config.RecordSeconds));
+        playfieldRecorder.Stop();
+        backglassRecorder.Stop();
+        await Task.WhenAll(playfieldTcs.Task, backglassTcs.Task);
+        // Dispose both recorders before returning to publish their output files.
     }
 
     private static ScreenRecorderLib.Recorder CreateScreenRecorder(DisplayRecordingSource displaySource)

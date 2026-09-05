@@ -37,7 +37,12 @@
                            LineHeight="96"
                            Margin="0,24,0,0"
                            TextAlignment="Center"
-                           TextWrapping="Wrap"/>
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed">
+                    <Run Text="Times Played: " Foreground="DimGray"/><Run x:Name="TimesPlayedValue"/><LineBreak/>
+                    <Run Text="Total Time Played: " Foreground="DimGray"/><Run x:Name="TotalTimePlayedValue"/><LineBreak/>
+                    <Run Text="Last Played: " Foreground="DimGray"/><Run x:Name="LastPlayedValue"/>
+                </TextBlock>
             </StackPanel>
         </Border>
 

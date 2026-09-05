@@ -1,83 +1,104 @@
-using System;
+using System.Diagnostics;
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Threading;
 using LibVLCSharp.Shared;
 
 namespace VirtualPinballLauncher;
 
-public sealed class LoopingVideoPlayer : IDisposable
+public sealed class LoopingVideoPlayer : IAsyncDisposable
 {
     private readonly LibVLC libVlc;
     private readonly MediaPlayer mediaPlayer;
-    private readonly Dispatcher dispatcher;
-    private volatile string? currentPath;
-    private bool disposed;
+    private readonly MediaOperationQueue operations = new();
+    private volatile Playback? currentPlayback;
+    private long generation;
+
+    private sealed record Playback(string Path, long Generation);
 
     public MediaPlayer MediaPlayer => mediaPlayer;
 
-    public LoopingVideoPlayer(Dispatcher dispatcher)
+    public LoopingVideoPlayer(LibVLC libVlc)
     {
-        this.dispatcher = dispatcher;
-        libVlc = new LibVLC(
-            "--no-video-title-show",
-            "--no-drop-late-frames",
-            "--no-skip-frames",
-            "--clock-jitter=0");
+        this.libVlc = libVlc;
         mediaPlayer = new MediaPlayer(libVlc);
         mediaPlayer.EndReached += OnEndReached;
     }
 
-    public async Task PlayAsync(string? path, CancellationToken token)
+    public Task PlayAsync(string? path, CancellationToken token)
     {
-        token.ThrowIfCancellationRequested();
-        await dispatcher.InvokeAsync(() =>
+        var request = Interlocked.Increment(ref generation);
+        return operations.Enqueue(() =>
         {
-            token.ThrowIfCancellationRequested();
-            if (disposed) return;
+            if (request != Volatile.Read(ref generation)) return;
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
-                Stop();
+                StopCore();
                 return;
             }
 
-            using var media = new Media(libVlc, new Uri(path));
-            currentPath = path;
-            mediaPlayer.Play(media);
-        });
+            token.ThrowIfCancellationRequested();
+            if (request != Volatile.Read(ref generation)) return;
+            StartPlayback(new Playback(path, request));
+        }, token);
     }
 
-    public void Stop()
+    public Task StopAsync()
     {
-        if (disposed) return;
-        currentPath = null;
+        Interlocked.Increment(ref generation);
+        return operations.Enqueue(StopCore);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Interlocked.Increment(ref generation);
+        return new ValueTask(operations.CompleteAsync(() =>
+        {
+            mediaPlayer.EndReached -= OnEndReached;
+            try { StopCore(); }
+            finally { mediaPlayer.Dispose(); }
+        }));
+    }
+
+    private void StopCore()
+    {
+        // Clear the session before stopping so a final native callback cannot restart it.
+        currentPlayback = null;
         mediaPlayer.Stop();
     }
 
-    public void Dispose()
+    private void StartPlayback(Playback playback)
     {
-        if (disposed) return;
-        disposed = true;
-        currentPath = null;
-        mediaPlayer.EndReached -= OnEndReached;
-        mediaPlayer.Stop();
-        mediaPlayer.Dispose();
-        libVlc.Dispose();
+        using var media = new Media(libVlc, new Uri(playback.Path));
+        // Replace media directly: an explicit Stop tears down the video output and flashes.
+        // Ignore callbacks from the outgoing media while VLC replaces it.
+        currentPlayback = null;
+        if (!mediaPlayer.Play(media))
+            throw new IOException($"Could not play preview: {playback.Path}");
+        currentPlayback = playback;
     }
 
     private void OnEndReached(object? sender, EventArgs e)
     {
-        // Don't block the media player thread.
-        var path = currentPath;
-        dispatcher.BeginInvoke(() =>
+        var playback = currentPlayback;
+        if (playback != null)
+            _ = RestartAsync(playback);
+    }
+
+    private async Task RestartAsync(Playback playback)
+    {
+        try
         {
-            if (disposed || path != currentPath) return;
-            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            // Never call VLC from its event thread. Ignore loops from an older selection.
+            await operations.Enqueue(() =>
             {
-                using var media = new Media(libVlc, new Uri(path));
-                mediaPlayer.Play(media);
-            }
-        });
+                if (playback != currentPlayback || playback.Generation != Volatile.Read(ref generation)) return;
+
+                if (File.Exists(playback.Path)) StartPlayback(playback);
+                else StopCore();
+            }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError($"Preview loop failed: {ex}");
+        }
     }
 }
