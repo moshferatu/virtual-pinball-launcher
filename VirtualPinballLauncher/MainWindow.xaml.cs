@@ -315,13 +315,15 @@ public partial class MainWindow : Window
 
         try
         {
+            // Keep the DMD in sync with every selection, even while a flipper is held.
+            var stats = tableStats.GetTableStatsForDisplay(config.TablesDirectory, table.DisplayName);
+            dmdWindow?.ShowTableProperties(table.DisplayName, stats);
+
             // Wait for navigation to settle before starting either decoder.
             if (delay)
                 await Task.Delay(100, token);
             token.ThrowIfCancellationRequested();
 
-            var stats = tableStats.GetTableStatsForDisplay(config.TablesDirectory, table.DisplayName);
-            dmdWindow?.ShowTableProperties(table.DisplayName, stats);
             if (!force && previewTablePath == table.VpxPath) return;
 
             previewTablePath = null;

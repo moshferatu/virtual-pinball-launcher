@@ -56,6 +56,7 @@ internal static class Program
             CheckMediaQueueAsync().GetAwaiter().GetResult();
             CheckRecordingFilesAsync(directory).GetAwaiter().GetResult();
             MediaPlaybackChecks.RunAsync(directory).GetAwaiter().GetResult();
+            TableNavigationChecks.Run(directory);
             CheckWindowShutdown();
             if (args.Contains("--window-focus")) WindowFocusChecks.Run(directory);
             Console.WriteLine("All launcher regression checks passed.");
