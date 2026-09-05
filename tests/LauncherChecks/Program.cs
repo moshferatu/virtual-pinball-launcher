@@ -8,7 +8,7 @@ using VirtualPinballLauncher;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         var directory = Path.Combine(Path.GetTempPath(), "LauncherChecks-" + Guid.NewGuid());
         Directory.CreateDirectory(directory);
@@ -57,6 +57,7 @@ internal static class Program
             CheckRecordingFilesAsync(directory).GetAwaiter().GetResult();
             MediaPlaybackChecks.RunAsync(directory).GetAwaiter().GetResult();
             CheckWindowShutdown();
+            if (args.Contains("--window-focus")) WindowFocusChecks.Run(directory);
             Console.WriteLine("All launcher regression checks passed.");
         }
         finally

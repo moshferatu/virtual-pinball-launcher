@@ -7,7 +7,9 @@
         ResizeMode="NoResize"
         AllowsTransparency="False"
         Background="Black"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False">
     <Grid>
         <Border Padding="36" Background="Black">
             <StackPanel VerticalAlignment="Center"

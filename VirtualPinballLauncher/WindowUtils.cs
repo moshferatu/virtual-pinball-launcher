@@ -1,12 +1,21 @@
 using System.Linq;
 using System.Windows;
-using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
 namespace VirtualPinballLauncher;
 
 public static class WindowUtils
 {
+    internal static void PreventOverlayActivation(this Window host, FrameworkElement content)
+    {
+        // VideoView moves its content into an owned Window when its template is
+        // applied. Configure that window before the native video host shows it.
+        var overlay = Window.GetWindow(content);
+        if (overlay == null || overlay == host) return;
+        overlay.ShowActivated = false;
+        overlay.Focusable = false;
+    }
+
     public static void MoveToMonitor(this Window window, int index)
     {
         var sorted = Forms.Screen.AllScreens

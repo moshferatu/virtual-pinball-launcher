@@ -8,6 +8,7 @@ public partial class BackglassWindow : Window
     {
         InitializeComponent();
         BackglassPlayer.MediaPlayer = videoPlayer.MediaPlayer;
+        BackglassPlayer.Loaded += (_, _) => this.PreventOverlayActivation(LoadingOverlay);
     }
 
     public void DetachPlayer() => BackglassPlayer.MediaPlayer = null;

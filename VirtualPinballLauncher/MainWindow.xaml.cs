@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using MessageBox = System.Windows.MessageBox;
 using Cursors = System.Windows.Input.Cursors;
 using Forms = System.Windows.Forms;
@@ -73,6 +74,20 @@ public partial class MainWindow : Window
         this.previews = previews;
         InitializeComponent();
         PreviewPlayer.MediaPlayer = previews.Playfield.MediaPlayer;
+        PreviewPlayer.Loaded += (_, _) => this.PreventOverlayActivation(LoadingOverlay);
+        ContentRendered += (_, _) => RequestInputFocus();
+    }
+
+    private void RequestInputFocus()
+    {
+        // VideoView creates a separate overlay window during loading. Let those
+        // Loaded/render callbacks finish before choosing the keyboard input window.
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (isClosed || launchInProgress || !IsVisible || !IsEnabled) return;
+            Activate();
+            Keyboard.Focus(this);
+        }, DispatcherPriority.ContextIdle);
     }
 
     protected override async void OnClosing(CancelEventArgs e)
@@ -141,8 +156,6 @@ public partial class MainWindow : Window
         windows.Add((dmdWindow, dmdWindow.LoadingOverlay));
         windows.Add((backglassWindow, backglassWindow.LoadingOverlay));
 
-        Focus();
-
         try
         {
             config = await Config.LoadAsync(Config.DefaultPath);
@@ -164,6 +177,10 @@ public partial class MainWindow : Window
         {
             TableNameText.Text = "Error loading config / scanning tables.";
             MessageBox.Show(ex.ToString(), "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            RequestInputFocus();
         }
     }
 
@@ -348,7 +365,7 @@ public partial class MainWindow : Window
             overlay.SetLoading(false);
             window.Topmost = true;
         }
-        Activate();
+        RequestInputFocus();
     }
 
     private async Task LaunchSelectedAsync()

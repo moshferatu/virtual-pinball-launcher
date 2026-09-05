@@ -8,10 +8,14 @@
         ResizeMode="NoResize"
         AllowsTransparency="False"
         Background="Black"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False">
     <Grid>
 
         <vlc:VideoView x:Name="BackglassPlayer"
+            Focusable="False"
+            IsTabStop="False"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch">
 

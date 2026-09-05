@@ -15,6 +15,8 @@
     <Grid>
 
         <vlc:VideoView x:Name="PreviewPlayer"
+            Focusable="False"
+            IsTabStop="False"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch">
 
