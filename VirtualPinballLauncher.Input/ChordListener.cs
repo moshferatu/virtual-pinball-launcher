@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace VirtualPinballLauncher.Input;
 
 /// <summary>
@@ -14,13 +12,10 @@ namespace VirtualPinballLauncher.Input;
 /// forgotten whenever the modifier changes.
 ///
 /// <see cref="Handle"/> is meant to be called from a single thread (the hook thread);
-/// <see cref="IsModifierHeld"/> may be read from any thread.
+/// <see cref="IsModifierHeld"/> and <see cref="IsChordHeld"/> may be read from any thread.
 /// </summary>
 public sealed class ChordListener
 {
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
-
     private readonly HashSet<int> modifiers = new();
     private readonly Dictionary<(int Modifier, int Key), KeyChord> chords = new();
     private readonly HashSet<int> swallowedKeys = new();
@@ -30,7 +25,7 @@ public sealed class ChordListener
 
     public ChordListener(IEnumerable<KeyChord> chordSet, Func<int, bool>? isPhysicallyDown = null)
     {
-        this.isPhysicallyDown = isPhysicallyDown ?? (vk => (GetAsyncKeyState(vk) & 0x8000) != 0);
+        this.isPhysicallyDown = isPhysicallyDown ?? KeyState.IsPhysicallyDown;
         foreach (var chord in chordSet)
         {
             if (!chord.IsChord) continue;
@@ -50,6 +45,22 @@ public sealed class ChordListener
 
     public bool IsModifierHeld => Volatile.Read(ref heldModifier) != 0;
 
+    /// <summary>
+    /// Whether a chord that fired is still being held: its modifier is the held one and
+    /// physically down, and its key has not been released since it fired. Callers cannot
+    /// ask Windows about the chord key themselves, because a key the hook swallows never
+    /// reaches the key-state table that GetAsyncKeyState reads.
+    /// </summary>
+    public bool IsChordHeld(KeyChord chord)
+    {
+        if (!chord.IsChord || Volatile.Read(ref heldModifier) != chord.ModifierVirtualKey) return false;
+        lock (swallowedKeys)
+        {
+            if (!swallowedKeys.Contains(chord.VirtualKey)) return false;
+        }
+        return isPhysicallyDown(chord.ModifierVirtualKey);
+    }
+
     public bool IsModifier(int virtualKey) => modifiers.Contains(virtualKey);
 
     public bool HasChords => chords.Count > 0;
@@ -63,14 +74,14 @@ public sealed class ChordListener
         if (held != 0 && virtualKey != held && !isPhysicallyDown(held))
         {
             Volatile.Write(ref heldModifier, 0);
-            swallowedKeys.Clear();
+            ClearSwallowed();
             StaleModifierDropped?.Invoke(held);
             held = 0;
         }
 
         if (isDown)
         {
-            if (swallowedKeys.Contains(virtualKey))
+            if (IsSwallowed(virtualKey))
                 return true; // auto-repeat of a chord key that already fired
 
             // A key that completes the held chord is a chord key first, even if it is a
@@ -78,7 +89,7 @@ public sealed class ChordListener
             if (held != 0 && chords.TryGetValue((held, virtualKey), out var chord))
             {
                 chordFiredDuringHold = true;
-                swallowedKeys.Add(virtualKey);
+                lock (swallowedKeys) swallowedKeys.Add(virtualKey);
                 ChordPressed?.Invoke(chord);
                 return true;
             }
@@ -88,7 +99,7 @@ public sealed class ChordListener
                 if (held == 0)
                 {
                     chordFiredDuringHold = false;
-                    swallowedKeys.Clear();
+                    ClearSwallowed();
                     Volatile.Write(ref heldModifier, virtualKey);
                 }
                 return false;
@@ -100,12 +111,22 @@ public sealed class ChordListener
         if (virtualKey == held)
         {
             Volatile.Write(ref heldModifier, 0);
-            swallowedKeys.Clear();
+            ClearSwallowed();
             if (!chordFiredDuringHold)
                 ModifierTapped?.Invoke(virtualKey);
             return false;
         }
 
-        return swallowedKeys.Remove(virtualKey);
+        lock (swallowedKeys) return swallowedKeys.Remove(virtualKey);
+    }
+
+    private bool IsSwallowed(int virtualKey)
+    {
+        lock (swallowedKeys) return swallowedKeys.Contains(virtualKey);
+    }
+
+    private void ClearSwallowed()
+    {
+        lock (swallowedKeys) swallowedKeys.Clear();
     }
 }

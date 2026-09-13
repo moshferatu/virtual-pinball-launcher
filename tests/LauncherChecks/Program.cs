@@ -54,6 +54,7 @@ internal static class Program
 
             CheckDmdDisplay();
             KeyBindingChecks.Run();
+            VolumeRepeatChecks.Run();
             ExternalProgramChecks.RunAsync(directory).GetAwaiter().GetResult();
             CheckMediaQueueAsync().GetAwaiter().GetResult();
             CheckRecordingFilesAsync(directory).GetAwaiter().GetResult();

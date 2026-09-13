@@ -54,6 +54,9 @@ public sealed class KeyBindingHost : IDisposable
 
     public bool IsModifierHeld => listener.IsModifierHeld;
 
+    /// <summary>Whether a chord that fired is still held down; safe to call from the UI thread.</summary>
+    public bool IsChordHeld(KeyChord chord) => listener.IsChordHeld(chord);
+
     /// <summary>Installs the hook when there are chords to listen for. Returns false if Windows refused it.</summary>
     public bool Start()
     {

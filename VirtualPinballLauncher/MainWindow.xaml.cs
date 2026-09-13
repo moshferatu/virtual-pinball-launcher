@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using VirtualPinballLauncher.Input;
 using MessageBox = System.Windows.MessageBox;
 using Cursors = System.Windows.Input.Cursors;
 using Forms = System.Windows.Forms;
@@ -288,10 +289,12 @@ public partial class MainWindow : Window
                 KillTable();
                 break;
             case LauncherAction.VolumeUp:
-                volumeOverlayWindow?.VolumeUp();
+                // The overlay repeats on its own while the key stays down, so keyboard
+                // auto-repeat must not add extra steps on top.
+                if (!isRepeat) volumeOverlayWindow?.VolumeUp(StillDown(binding.Chord));
                 break;
             case LauncherAction.VolumeDown:
-                volumeOverlayWindow?.VolumeDown();
+                if (!isRepeat) volumeOverlayWindow?.VolumeDown(StillDown(binding.Chord));
                 break;
             case LauncherAction.ShutdownPc:
                 SystemPower.PowerOff(restart: false);
@@ -357,6 +360,15 @@ public partial class MainWindow : Window
         flipperSound?.Play();
         _ = RefreshPreviewAsync();
     }
+
+    /// <summary>
+    /// Reports whether the binding's keys are still held, wherever focus is. Only the hook
+    /// can answer for a chord, since it swallows the chord key before Windows records it;
+    /// a single key reached the launcher window normally, so Windows knows its state.
+    /// </summary>
+    private Func<bool> StillDown(KeyChord chord) => chord.IsChord
+        ? () => bindingHost?.IsChordHeld(chord) == true
+        : () => KeyState.IsPhysicallyDown(chord.VirtualKey);
 
     private void Next(bool isRepeat = false)
     {

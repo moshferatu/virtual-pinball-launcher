@@ -125,20 +125,32 @@ internal static class KeyBindingChecks
         Up(F12);
         Check(taps.Count == 1, "No tap after the F12+5 chord");
 
+        var volumeDown = KeyChord.Parse("5+Left");
+        Check(!listener.IsChordHeld(volumeDown), "A chord is not held before it fires");
         Down(D5);
         Check(Down(Left) && chords.Last() == "5+Left", "The volume chord uses its own modifier");
+        Check(listener.IsChordHeld(volumeDown) && !listener.IsChordHeld(KeyChord.Parse("5+Right")),
+            "A chord counts as held from the moment it fires, and only that chord");
         Check(!Down(D1), "Chord keys of a different modifier pass through");
+        Down(Left);
+        Check(listener.IsChordHeld(volumeDown), "Chord key auto-repeat keeps the chord held");
         Up(Left);
+        Check(!listener.IsChordHeld(volumeDown), "Releasing the chord key ends the hold");
+        Down(Left);
+        physicallyDown.Remove(D5); // the modifier release never reaches the hook
+        Check(!listener.IsChordHeld(volumeDown), "A chord is not held once its modifier is physically up, even if the hook missed the release");
+        physicallyDown.Add(D5);
         Up(D5);
+        Check(!listener.IsChordHeld(volumeDown), "Releasing the modifier ends the hold");
         Check(!Down(Left) && !Up(Left), "Left navigates again once 5 is released");
 
         // A chord key whose release was never delivered must not block the next press of the same chord.
         Down(F12);
-        Check(Down(D1) && chords.Count == 5, "Chord fires before a lost release");
+        Check(Down(D1) && chords.Count == 6, "Chord fires before a lost release");
         physicallyDown.Remove(D1); // the release never reaches the hook
         Up(F12);
         Down(F12);
-        Check(Down(D1) && chords.Count == 6, "The same chord fires again after its key release was lost");
+        Check(Down(D1) && chords.Count == 7, "The same chord fires again after its key release was lost");
         Up(D1);
         Up(F12);
 
@@ -148,7 +160,7 @@ internal static class KeyBindingChecks
         Check(!Down(Enter) && stale.SequenceEqual(new[] { F12 }) && !listener.IsModifierHeld,
             "A modifier that is no longer physically down is dropped on the next key");
         Up(Enter);
-        Check(!Down(D1) && chords.Count == 6, "Chord keys pass through once the stale modifier is dropped");
+        Check(!Down(D1) && chords.Count == 7, "Chord keys pass through once the stale modifier is dropped");
         Up(D1);
         Check(taps.Count == 1, "Dropping a stale modifier is not reported as a tap");
         Console.WriteLine("PASS: Chord listener swallows chorded keys, reports modifier taps, heals lost releases, and passes everything else through");

@@ -162,7 +162,7 @@ Mouse wheel navigation is always on.
   - `SingleInstance`: if the program is already running, bring it to the front instead of starting another copy.
   - `ShowConsole`: console windows are hidden by default, both the one Windows opens for a console-subsystem program or a batch file and any the program opens later. Set this to `true` for a program that needs its console visible.
 - `KillTable`: ends Visual Pinball X. Works while a table is running.
-- `VolumeUp`, `VolumeDown`: master volume, one bar at a time, with the on-screen overlay. Work while a table is running.
+- `VolumeUp`, `VolumeDown`: master volume, one percent per press, with the on-screen overlay. Hold the key to keep going; the change speeds up the longer it is held. Work while a table is running.
 - `ShutdownPc`, `RestartPc`: power off or restart the PC. Work while a table is running.
 
 While a table or a `Run` program is on screen, only `KillTable`, the volume actions, and the power actions respond.

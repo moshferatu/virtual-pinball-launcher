@@ -1,11 +1,14 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using NAudio.CoreAudioApi;
 using Brushes = System.Windows.Media.Brushes;
+using Color = System.Windows.Media.Color;
 using Rectangle = System.Windows.Shapes.Rectangle;
+using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 
 namespace VirtualPinballLauncher;
 
@@ -16,8 +19,9 @@ public partial class VolumeOverlayWindow : Window
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
 
-    private const int BarCount = 20;
-    private const float VolumeStep = 1f / BarCount;
+    // One line per percent so every 0-100 value has its own mark.
+    private const int LineCount = 100;
+    private const float VolumeStep = 1f / LineCount;
 
     [DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -33,54 +37,74 @@ public partial class VolumeOverlayWindow : Window
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOACTIVATE = 0x0010;
 
+    // Dim yellow for lines above the current level so the whole scale stays visible.
+    private static readonly SolidColorBrush UnfilledBrush = CreateFrozen(Color.FromArgb(0x40, 0xFF, 0xFF, 0x00));
+
     private MMDeviceEnumerator? deviceEnumerator;
     private MMDevice? device;
     private IntPtr hwnd;
     private DispatcherTimer? hideTimer;
-    private readonly Rectangle[] bars = new Rectangle[BarCount];
+    private readonly Rectangle[] lines = new Rectangle[LineCount];
+
+    // Hold-to-repeat state: the step being repeated, whether the key is still
+    // physically down, and how long it has been held (which sets the repeat rate).
+    private readonly DispatcherTimer repeatTimer = new();
+    private readonly Stopwatch holdStopwatch = new();
+    private Func<bool>? holdStillDown;
+    private float holdDelta;
+    private TimeSpan holdLastTick;
+    private double holdStepsOwed;
 
     public VolumeOverlayWindow()
     {
         InitializeComponent();
-        BuildBars();
+        BuildLines();
+        repeatTimer.Tick += (_, _) => OnRepeatTick();
         SourceInitialized += OnSourceInitialized;
-        SizeChanged += (_, _) => UpdateBarDimensions();
+        SizeChanged += (_, _) => UpdateLineDimensions();
         Closed += OnClosed;
     }
 
-    private void BuildBars()
+    private void BuildLines()
     {
-        for (int i = 0; i < BarCount; i++)
+        for (int i = 0; i < LineCount; i++)
         {
-            var rect = new Rectangle
+            var line = new Rectangle
             {
-                Stroke = Brushes.Yellow,
-                RadiusX = 2,
-                RadiusY = 2
+                Fill = UnfilledBrush,
+                VerticalAlignment = VerticalAlignment.Center
             };
-            bars[i] = rect;
-            VolumeBars.Children.Add(rect);
+            lines[i] = line;
+            VolumeBars.Children.Add(line);
         }
     }
 
-    private void UpdateBarDimensions()
+    private void UpdateLineDimensions()
     {
         if (ActualWidth <= 0) return;
 
         // The overlay fills the monitor, so ActualWidth is the screen width. Aim
-        // for the bar row to span ~75% of that, then split evenly across all bars.
-        double slot = ActualWidth * 0.75 / BarCount;
-        double margin = slot * 0.05;
-        double barWidth = slot - 2 * margin;
-        double barHeight = barWidth * 2.0;
-        double stroke = barWidth / 15.0;
+        // for the row of lines to span ~75% of that, then give every line an equal
+        // slot. Each line's thickness ramps up with its position so the row reads
+        // as a wedge: hairline at 1%, nearly filling its slot at 100%.
+        double rowWidth = ActualWidth * 0.75;
+        double slot = rowWidth / LineCount;
+        double minThickness = Math.Max(1.0, slot * 0.15);
+        double maxThickness = slot * 0.85;
+        double height = rowWidth * 0.08;
 
-        foreach (var bar in bars)
+        for (int i = 0; i < LineCount; i++)
         {
-            bar.Width = barWidth;
-            bar.Height = barHeight;
-            bar.Margin = new Thickness(margin, 0, margin, 0);
-            bar.StrokeThickness = stroke;
+            double t = (double)i / (LineCount - 1);
+            double thickness = minThickness + (maxThickness - minThickness) * t;
+            double sideMargin = (slot - thickness) / 2;
+
+            var line = lines[i];
+            line.Width = thickness;
+            line.Height = height;
+            line.Margin = new Thickness(sideMargin, 0, sideMargin, 0);
+            line.RadiusX = thickness / 2;
+            line.RadiusY = thickness / 2;
         }
     }
 
@@ -103,7 +127,7 @@ public partial class VolumeOverlayWindow : Window
             VolumePanel.Visibility = Visibility.Collapsed;
         };
 
-        UpdateBars(GetCurrentVolume());
+        UpdateLines(GetCurrentVolume());
     }
 
     private float GetCurrentVolume()
@@ -117,30 +141,76 @@ public partial class VolumeOverlayWindow : Window
         device.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(level, 0f, 1f);
     }
 
-    /// <summary>Raises the master volume one bar; bound through KeyBindings (VolumeUp).</summary>
-    public void VolumeUp() => AdjustVolume(+VolumeStep);
+    /// <summary>
+    /// Raises the master volume one percent, then keeps raising it, faster and faster,
+    /// for as long as <paramref name="stillDown"/> reports the key held. Bound through
+    /// KeyBindings (VolumeUp).
+    /// </summary>
+    public void VolumeUp(Func<bool>? stillDown = null) => BeginHold(+VolumeStep, stillDown);
 
-    /// <summary>Lowers the master volume one bar; bound through KeyBindings (VolumeDown).</summary>
-    public void VolumeDown() => AdjustVolume(-VolumeStep);
+    /// <summary>Lowers the master volume one percent and keeps lowering it while held; see <see cref="VolumeUp"/>.</summary>
+    public void VolumeDown(Func<bool>? stillDown = null) => BeginHold(-VolumeStep, stillDown);
+
+    private void BeginHold(float delta, Func<bool>? stillDown)
+    {
+        AdjustVolume(delta);
+
+        // Polling the physical key state, rather than waiting for a release event, means
+        // a release the launcher never hears about (a game grabbing the keyboard, a hook
+        // briefly gone) can never leave the volume running away.
+        EndHold();
+        if (stillDown == null) return;
+        holdDelta = delta;
+        holdStillDown = stillDown;
+        holdLastTick = TimeSpan.Zero;
+        holdStepsOwed = 0;
+        holdStopwatch.Restart();
+        repeatTimer.Interval = VolumeRepeat.Interval(TimeSpan.Zero);
+        repeatTimer.Start();
+    }
+
+    private void OnRepeatTick()
+    {
+        if (holdStillDown?.Invoke() != true)
+        {
+            EndHold();
+            return;
+        }
+
+        // The first repeat is always exactly one step; after that the rate and the real
+        // time between ticks decide how many, so a late tick catches up rather than lagging.
+        var held = holdStopwatch.Elapsed;
+        var steps = holdLastTick == TimeSpan.Zero ? 1 : VolumeRepeat.StepsDue(held, held - holdLastTick, ref holdStepsOwed);
+        holdLastTick = held;
+        if (steps > 0) AdjustVolume(steps * holdDelta);
+        repeatTimer.Interval = VolumeRepeat.Interval(held);
+    }
+
+    private void EndHold()
+    {
+        repeatTimer.Stop();
+        holdStopwatch.Reset();
+        holdStillDown = null;
+    }
 
     private void AdjustVolume(float delta)
     {
-        // Snap to the nearest 5% step before adjusting so the bars line up cleanly
-        // even if the system volume started at an off-grid value.
+        // Snap to a whole percent before adjusting so the lines line up cleanly
+        // even if the system volume started at a fractional value.
         var current = GetCurrentVolume();
         var snapped = (float)Math.Round(current / VolumeStep) * VolumeStep;
         var next = Math.Clamp(snapped + delta, 0f, 1f);
         SetVolume(next);
-        UpdateBars(next);
+        UpdateLines(next);
         ShowOverlayBriefly();
     }
 
-    private void UpdateBars(float volume)
+    private void UpdateLines(float volume)
     {
         int filled = (int)Math.Round(volume / VolumeStep);
-        for (int i = 0; i < BarCount; i++)
+        for (int i = 0; i < LineCount; i++)
         {
-            bars[i].Fill = i < filled ? Brushes.Yellow : Brushes.Transparent;
+            lines[i].Fill = i < filled ? Brushes.Yellow : UnfilledBrush;
         }
     }
 
@@ -158,8 +228,17 @@ public partial class VolumeOverlayWindow : Window
         hideTimer?.Start();
     }
 
+    private static SolidColorBrush CreateFrozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
+        EndHold();
+        hideTimer?.Stop();
         device?.Dispose();
         deviceEnumerator?.Dispose();
     }
