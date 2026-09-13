@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using MessageBox = System.Windows.MessageBox;
@@ -7,6 +8,9 @@ namespace VirtualPinballLauncher;
 
 public partial class App : System.Windows.Application
 {
+    // Held for the life of the process so a second copy can recognise the first.
+    private static Mutex? instanceMutex;
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -30,6 +34,16 @@ public partial class App : System.Windows.Application
                 Shutdown(1);
                 return;
             }
+        }
+
+        LauncherLog.Install();
+
+        // One launcher per session: a second copy (for example from the ReturnToLauncher hotkey) leaves quietly.
+        instanceMutex = new Mutex(true, @"Local\VirtualPinballLauncher.Instance", out var isFirstInstance);
+        if (!isFirstInstance)
+        {
+            Shutdown(0);
+            return;
         }
 
         // Keep the dispatcher alive until the views close and native playback is disposed.

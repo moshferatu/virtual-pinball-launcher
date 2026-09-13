@@ -17,6 +17,11 @@
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\VirtualPinballLauncher.Input\VirtualPinballLauncher.Input.csproj" />
+    <!-- Builds the desktop-side companion next to the launcher so shell mode can start it. -->
+    <ProjectReference Include="..\ReturnToLauncher\ReturnToLauncher.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="flipper.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

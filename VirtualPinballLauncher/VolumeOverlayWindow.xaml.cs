@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -12,14 +11,6 @@ namespace VirtualPinballLauncher;
 
 public partial class VolumeOverlayWindow : Window
 {
-    private const int WH_KEYBOARD_LL = 13;
-    private const int WM_KEYDOWN = 0x0100;
-    private const int WM_SYSKEYDOWN = 0x0104;
-
-    private const int VK_5 = 0x35;
-    private const int VK_LEFT = 0x25;
-    private const int VK_RIGHT = 0x27;
-
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -27,33 +18,6 @@ public partial class VolumeOverlayWindow : Window
 
     private const int BarCount = 20;
     private const float VolumeStep = 1f / BarCount;
-
-    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KBDLLHOOKSTRUCT
-    {
-        public uint vkCode;
-        public uint scanCode;
-        public uint flags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr GetModuleHandle(string? lpModuleName);
 
     [DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -74,10 +38,6 @@ public partial class VolumeOverlayWindow : Window
     private IntPtr hwnd;
     private DispatcherTimer? hideTimer;
     private readonly Rectangle[] bars = new Rectangle[BarCount];
-
-    // Keep the delegate alive so the GC doesn't collect it while the hook is active.
-    private LowLevelKeyboardProc? hookProc;
-    private IntPtr hookHandle;
 
     public VolumeOverlayWindow()
     {
@@ -143,47 +103,7 @@ public partial class VolumeOverlayWindow : Window
             VolumePanel.Visibility = Visibility.Collapsed;
         };
 
-        InstallKeyboardHook();
         UpdateBars(GetCurrentVolume());
-    }
-
-    private void InstallKeyboardHook()
-    {
-        hookProc = HookCallback;
-
-        // WH_KEYBOARD_LL needs a valid module handle; the EXE's module works fine.
-        using var curProcess = Process.GetCurrentProcess();
-        var moduleName = curProcess.MainModule?.ModuleName;
-        var hMod = moduleName != null ? GetModuleHandle(moduleName) : IntPtr.Zero;
-
-        hookHandle = SetWindowsHookEx(WH_KEYBOARD_LL, hookProc, hMod, 0);
-    }
-
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-    {
-        if (nCode >= 0)
-        {
-            int msg = wParam.ToInt32();
-            if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
-            {
-                var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                bool ctrl = (GetAsyncKeyState(VK_5) & 0x8000) != 0;
-                if (ctrl)
-                {
-                    if (kb.vkCode == VK_LEFT)
-                    {
-                        Dispatcher.BeginInvoke(() => AdjustVolume(-VolumeStep));
-                        return new IntPtr(1);
-                    }
-                    if (kb.vkCode == VK_RIGHT)
-                    {
-                        Dispatcher.BeginInvoke(() => AdjustVolume(+VolumeStep));
-                        return new IntPtr(1);
-                    }
-                }
-            }
-        }
-        return CallNextHookEx(hookHandle, nCode, wParam, lParam);
     }
 
     private float GetCurrentVolume()
@@ -196,6 +116,12 @@ public partial class VolumeOverlayWindow : Window
         if (device == null) return;
         device.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(level, 0f, 1f);
     }
+
+    /// <summary>Raises the master volume one bar; bound through KeyBindings (VolumeUp).</summary>
+    public void VolumeUp() => AdjustVolume(+VolumeStep);
+
+    /// <summary>Lowers the master volume one bar; bound through KeyBindings (VolumeDown).</summary>
+    public void VolumeDown() => AdjustVolume(-VolumeStep);
 
     private void AdjustVolume(float delta)
     {
@@ -234,11 +160,6 @@ public partial class VolumeOverlayWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        if (hookHandle != IntPtr.Zero)
-        {
-            UnhookWindowsHookEx(hookHandle);
-            hookHandle = IntPtr.Zero;
-        }
         device?.Dispose();
         deviceEnumerator?.Dispose();
     }

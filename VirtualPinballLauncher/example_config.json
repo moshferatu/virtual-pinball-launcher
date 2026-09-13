@@ -6,5 +6,26 @@
   "VideoExtension": ".mp4",
   "RecordSeconds": 30,
   "RecordDelaySeconds": 10,
-  "FfmpegPath": "ffmpeg"
+  "FfmpegPath": "ffmpeg",
+  "ReturnToLauncherHotkey": "F12+Enter",
+  "KeyBindings": [
+    { "Keys": ["Down", "Right", "RightShift", "PageDown"], "Action": "NextTable" },
+    { "Keys": ["Up", "Left", "LeftShift", "PageUp"], "Action": "PreviousTable" },
+    { "Keys": ["Enter", "Space", "1", "NumPad1"], "Action": "LaunchTable" },
+    { "Keys": "F12", "Action": "RandomTable" },
+    { "Keys": ["LeftCtrl", "RightCtrl"], "Action": "ToggleSort" },
+    { "Keys": "R", "Action": "RecordPreview" },
+    { "Keys": "Escape", "Action": "Exit" },
+    { "Keys": "5+Left", "Action": "VolumeDown" },
+    { "Keys": "5+Right", "Action": "VolumeUp" },
+    {
+      "Keys": "F12+1",
+      "Action": "Run",
+      "Command": "C:\\Devil's Crush\\devils-crush.exe",
+      "Arguments": "--cabinet --music-voice-overlay",
+      "WorkingDirectory": "C:\\Devil's Crush"
+    },
+    { "Keys": "F12+5", "Action": "Run", "Command": "C:\\Alien Crush\\Launch-Cabinet.cmd" },
+    { "Keys": "F12+Escape", "Action": "Run", "Command": "C:\\Tetris\\TetrisOLED\\bin\\Debug\\net8.0-windows\\TetrisOLED.exe" }
+  ]
 }

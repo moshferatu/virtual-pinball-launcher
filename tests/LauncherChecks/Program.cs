@@ -53,12 +53,16 @@ internal static class Program
             Check(overlay.Visibility == Visibility.Collapsed, "Loading completion hides the overlay");
 
             CheckDmdDisplay();
+            KeyBindingChecks.Run();
+            ExternalProgramChecks.RunAsync(directory).GetAwaiter().GetResult();
             CheckMediaQueueAsync().GetAwaiter().GetResult();
             CheckRecordingFilesAsync(directory).GetAwaiter().GetResult();
             MediaPlaybackChecks.RunAsync(directory).GetAwaiter().GetResult();
             TableNavigationChecks.Run(directory);
             CheckWindowShutdown();
             if (args.Contains("--window-focus")) WindowFocusChecks.Run(directory);
+            if (args.Contains("--window-focus") || args.Contains("--topmost")) TopmostChecks.Run();
+            if (args.Contains("--return-hotkey")) ReturnHotkeyChecks.RunAsync(directory).GetAwaiter().GetResult();
             Console.WriteLine("All launcher regression checks passed.");
         }
         finally

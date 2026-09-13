@@ -110,6 +110,17 @@ internal static class WindowFocusChecks
                 RequestInputFocus(main);
                 await SettleAsync();
                 CheckInputFocus(main, "Returning to the launcher restores native and WPF keyboard focus");
+
+                // The picker must prefer a program's real window over a small helper window.
+                var helper = new Window { Title = "Helper", Width = 40, Height = 30, ShowInTaskbar = false };
+                helper.Show();
+                await SettleAsync();
+                var picked = WindowActivation.FindMainWindow(pid => pid == Environment.ProcessId, out var pickedPid);
+                helper.Close();
+                if (pickedPid != Environment.ProcessId || picked == new WindowInteropHelper(helper).Handle)
+                    throw new InvalidOperationException("Main window detection picked a small helper window");
+                Console.WriteLine("PASS: Main window detection prefers the largest visible window of the process");
+
             }
             finally
             {

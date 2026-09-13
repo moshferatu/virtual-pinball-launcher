@@ -32,6 +32,17 @@ public partial class MainWindow : Window
     private VolumeOverlayWindow? volumeOverlayWindow;
     private readonly List<(Window Window, LoadingOverlay Overlay)> windows = new();
 
+    // Defaults apply until config.json is loaded, so the window answers keys even in checks that skip loading.
+    private KeyBindingMap keyBindings = KeyBindingMap.Build(Config.DefaultKeyBindings());
+    private KeyBindingHost? bindingHost;
+
+    // Actions that still make sense while a table or another program has the screen.
+    private static readonly HashSet<LauncherAction> ActionsAllowedDuringLaunch = new()
+    {
+        LauncherAction.VolumeUp, LauncherAction.VolumeDown, LauncherAction.KillTable,
+        LauncherAction.ShutdownPc, LauncherAction.RestartPc
+    };
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
 
@@ -110,6 +121,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            bindingHost?.Dispose();
             PreviewPlayer.MediaPlayer = null;
             backglassWindow?.DetachPlayer();
             playbackCancellation.Dispose();
@@ -156,10 +168,14 @@ public partial class MainWindow : Window
         windows.Add((dmdWindow, dmdWindow.LoadingOverlay));
         windows.Add((backglassWindow, backglassWindow.LoadingOverlay));
 
+        var problems = new List<string>();
         try
         {
             config = await Config.LoadAsync(Config.DefaultPath);
             if (isClosed) return;
+
+            InstallKeyBindings(config.KeyBindings, problems);
+
             tableList = TableScanner.Scan(config).ToList();
             SortTableList();
 
@@ -180,8 +196,23 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (problems.Count > 0 && !isClosed)
+                MessageBox.Show(string.Join("\n\n", problems), "Key Binding Problems", MessageBoxButton.OK, MessageBoxImage.Warning);
             RequestInputFocus();
         }
+    }
+
+    private void InstallKeyBindings(IEnumerable<KeyBinding> bindings, List<string> problems)
+    {
+        keyBindings = KeyBindingMap.Build(bindings);
+        problems.AddRange(keyBindings.Errors);
+
+        bindingHost?.Dispose();
+        bindingHost = new KeyBindingHost(keyBindings, Dispatcher);
+        bindingHost.ChordTriggered += binding => _ = HandleChordAsync(binding);
+        bindingHost.ModifierTapped += key => _ = HandleModifierTapAsync(key);
+        if (!bindingHost.Start())
+            problems.Add("Windows refused the keyboard hook, so key chords such as F12+1 will not work until the launcher is restarted.");
     }
 
     private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -194,55 +225,99 @@ public partial class MainWindow : Window
 
     private async void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (tableList.Count == 0)
-        {
-            if (e.Key == Key.Escape) Close();
+        if (isClosed) return;
+        // Any key that reaches this window passed the global hook first, unless the hook is gone.
+        bindingHost?.NoteWindowKeyEvent();
+        if (launchInProgress) return;
+        if (!keyBindings.TryGetSingle(e.Key, out var binding)) return;
+
+        // While a chord modifier is held, its partner keys belong to the chord, not to the launcher.
+        if (bindingHost?.HookActive == true && (bindingHost.IsModifierHeld || keyBindings.IsModifier(e.Key))) return;
+
+        if (tableList.Count == 0 && binding.Action != LauncherAction.Exit) return;
+        await ExecuteAsync(binding, e.IsRepeat);
+    }
+
+    private async Task HandleModifierTapAsync(Key key)
+    {
+        if (isClosed || launchInProgress || !IsActive) return;
+        if (tableList.Count == 0) return;
+        if (keyBindings.TryGetSingle(key, out var binding))
+            await ExecuteAsync(binding);
+    }
+
+    private async Task HandleChordAsync(ResolvedBinding binding)
+    {
+        if (isClosed) return;
+        if (launchInProgress && !ActionsAllowedDuringLaunch.Contains(binding.Action)) return;
+        if (tableList.Count == 0 && binding.Action is LauncherAction.NextTable or LauncherAction.PreviousTable
+            or LauncherAction.LaunchTable or LauncherAction.RandomTable or LauncherAction.ToggleSort or LauncherAction.RecordPreview)
             return;
-        }
+        await ExecuteAsync(binding);
+    }
 
-        if (isClosed || launchInProgress) return;
-
-        bool isRepeat = e.IsRepeat;
-
-        switch (e.Key)
+    private async Task ExecuteAsync(ResolvedBinding binding, bool isRepeat = false)
+    {
+        switch (binding.Action)
         {
-            case Key.Down:
-            case Key.Right:
-            case Key.RightShift:
-            case Key.PageDown:
+            case LauncherAction.NextTable:
                 Next(isRepeat);
                 break;
-
-            case Key.Up:
-            case Key.Left:
-            case Key.LeftShift:
-            case Key.PageUp:
+            case LauncherAction.PreviousTable:
                 Prev(isRepeat);
                 break;
-
-            case Key.Enter:
-            case Key.Space:
-            case Key.D1:
-            case Key.NumPad1:
+            case LauncherAction.LaunchTable:
                 await LaunchSelectedAsync();
                 break;
-
-            case Key.R:
-                await RecordSelectedPreviewAsync();
-                break;
-
-            case Key.F12:
+            case LauncherAction.RandomTable:
                 if (!isRepeat) SelectRandom();
                 break;
-
-            case Key.LeftCtrl:
-            case Key.RightCtrl:
+            case LauncherAction.ToggleSort:
                 if (!isRepeat) ToggleSortMode();
                 break;
-
-            case Key.Escape:
-                Close();
+            case LauncherAction.RecordPreview:
+                await RecordSelectedPreviewAsync();
                 break;
+            case LauncherAction.Exit:
+                if (!isRepeat) await ExitAsync();
+                break;
+            case LauncherAction.Run:
+                await RunProgramAsync(binding.Source);
+                break;
+            case LauncherAction.KillTable:
+                KillTable();
+                break;
+            case LauncherAction.VolumeUp:
+                volumeOverlayWindow?.VolumeUp();
+                break;
+            case LauncherAction.VolumeDown:
+                volumeOverlayWindow?.VolumeDown();
+                break;
+            case LauncherAction.ShutdownPc:
+                SystemPower.PowerOff(restart: false);
+                break;
+            case LauncherAction.RestartPc:
+                SystemPower.PowerOff(restart: true);
+                break;
+        }
+    }
+
+    private Task ExitAsync()
+    {
+        if (!isClosed) Close();
+        return Task.CompletedTask;
+    }
+
+    private void KillTable()
+    {
+        if (config == null || string.IsNullOrWhiteSpace(config.VpxExePath)) return;
+        foreach (var process in ExternalProgram.FindProcesses(Path.GetFileName(config.VpxExePath)))
+        {
+            using (process)
+            {
+                try { process.Kill(); }
+                catch (Exception ex) { Trace.TraceWarning($"Could not end VPX: {ex.Message}"); }
+            }
         }
     }
 
@@ -370,6 +445,15 @@ public partial class MainWindow : Window
         RequestInputFocus();
     }
 
+    /// <summary>Once another program owns the screen, free the DMD display and leave the previews ready underneath.</summary>
+    private void OnExternalWindowActivated()
+    {
+        if (isClosed) return;
+        dmdWindow?.Hide();
+        foreach (var (_, overlay) in windows)
+            overlay.SetLoading(false);
+    }
+
     private async Task LaunchSelectedAsync()
     {
         if (launchInProgress) return;
@@ -463,16 +547,50 @@ public partial class MainWindow : Window
 
                 await Task.Delay(1000, token);
                 if (isClosed || process.HasExited) return;
-                dmdWindow?.Hide();
                 ShowWindow(hwnd, SW_RESTORE);
                 SetForegroundWindow(hwnd);
-                // Leave the previews unobscured behind VPX, ready for its exit.
-                foreach (var (_, overlay) in windows)
-                    overlay.SetLoading(false);
+                OnExternalWindowActivated();
                 return;
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+    }
+
+    /// <summary>Runs a program bound with the Run action, the same way a table is launched.</summary>
+    private async Task RunProgramAsync(KeyBinding binding)
+    {
+        if (launchInProgress || isClosed) return;
+
+        var spec = ExternalProgramSpec.From(binding);
+        if (!File.Exists(spec.Command))
+        {
+            MessageBox.Show($"Program not found for {string.Join(", ", binding.Keys)}:\n{spec.Command}", "Launch Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        launchInProgress = true;
+        try
+        {
+            await RefreshPreviewAsync();
+            if (isClosed) return;
+            LauncherLog.Info($"Run: {spec.Command} {spec.Arguments}");
+            // The new process inherits the right to take the foreground from this one.
+            WindowActivation.AllowAnyProcessToTakeForeground();
+            SuspendWindows();
+            await ExternalProgram.RunAsync(spec, () => Dispatcher.Invoke(OnExternalWindowActivated));
+            LauncherLog.Info("Run: program finished.");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.ToString(), "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            launchInProgress = false;
+            RestoreWindows();
+            await RefreshPreviewAsync();
+        }
     }
 
     private async Task RecordSelectedPreviewAsync()

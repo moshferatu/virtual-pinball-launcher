@@ -10,6 +10,8 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 - Launches tables directly in Visual Pinball X.
 - Tracks plays, total play time, and last played date in `table-stats.csv`.
 - Records new playfield and backglass preview videos through `ffmpeg`.
+- Every key is configurable in one `KeyBindings` list, including global chords such as `F12+1` that start other programs.
+- Optional desktop hotkey helper that starts or activates the launcher, with no AutoHotkey needed.
 
 ## Requirements
 
@@ -21,7 +23,11 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 ## Project Layout
 
 - `VirtualPinballLauncher/` contains the WPF application.
+- `VirtualPinballLauncher.Input/` is a small library shared by the launcher, the hotkey helper, and the checks: key chord parsing and the global keyboard hook.
+- `ReturnToLauncher/` is the optional windowless helper that waits on the desktop for a hotkey and starts or activates the launcher.
 - `VirtualPinballLauncher/example_config.json` is the sample configuration.
+- `tests/LauncherChecks/` holds the regression checks.
+- `tools/Publish-Launcher.ps1` publishes both executables into one folder.
 - `virtual-pinball-launcher.sln` is the solution file.
 
 ## Build
@@ -30,7 +36,7 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 dotnet build
 ```
 
-The app targets `net8.0-windows` and uses WPF.
+The app targets `net8.0-windows` and uses WPF. Building the launcher also builds `ReturnToLauncher.exe` into the same output folder.
 
 Run the regression checks with:
 
@@ -38,9 +44,17 @@ Run the regression checks with:
 dotnet run --project tests/LauncherChecks
 ```
 
-These cover stats, DMD formatting, queued playback, native VLC looping and shutdown, and preview-file replacement failures. Playback checks use silent audio with dummy outputs; they do not launch VPX or record the desktop.
+These cover stats, DMD formatting, queued playback, native VLC looping and shutdown, preview-file replacement failures, key binding parsing, chord handling, config round-trips, and the process-tree wait used by the Run action (which briefly starts hidden `cmd.exe` processes). Playback checks use silent audio with dummy outputs; they do not launch VPX or record the desktop.
 
-To also check startup keyboard focus and cabinet-button navigation through the native window input route, run `dotnet run --project tests/LauncherChecks -- --window-focus`. This briefly opens small test windows without loading your cabinet configuration or launching VPX.
+To also check startup keyboard focus, cabinet-button navigation through the native window input route, and the topmost handling around a launched program, run `dotnet run --project tests/LauncherChecks -- --window-focus`. This briefly opens small test windows without loading your cabinet configuration or launching VPX.
+
+To drive the real `ReturnToLauncher.exe` with injected keystrokes, run `dotnet run --project tests/LauncherChecks -- --return-hotkey`. It presses `F12` and `F12+Enter` on your keyboard and starts a stub in place of the launcher, so run it with nothing important focused.
+
+To publish a self-contained copy outside the repository:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\Publish-Launcher.ps1 -Destination C:\vPinball\Launcher
+```
 
 ## Configuration
 
@@ -57,9 +71,13 @@ Example:
   "VideoExtension": ".mp4",
   "RecordSeconds": 30,
   "RecordDelaySeconds": 10,
-  "FfmpegPath": "ffmpeg"
+  "FfmpegPath": "ffmpeg",
+  "ReturnToLauncherHotkey": "F12+Enter",
+  "KeyBindings": [ ... ]
 }
 ```
+
+See `VirtualPinballLauncher/example_config.json` for the full file.
 
 ### Config Fields
 
@@ -71,6 +89,10 @@ Example:
 - `RecordSeconds`: Length of recorded preview videos.
 - `RecordDelaySeconds`: Delay after launching a table before recording starts.
 - `FfmpegPath`: `ffmpeg` executable name or full path.
+- `ReturnToLauncherHotkey`: Chord the optional desktop helper waits for. Default `F12+Enter`.
+- `KeyBindings`: Every key the launcher reacts to. See Key Bindings below.
+
+Relative `Command` paths are resolved next to the launcher executable. Fields this version does not know about are preserved when the file is rewritten. A `config.json` written by an older launcher gets the new sections added with their defaults on first load so they are visible and editable.
 
 ## File Matching
 
@@ -92,18 +114,72 @@ From the repo:
 dotnet run --project VirtualPinballLauncher
 ```
 
-Or run the built executable directly.
+Or run the built executable directly. Only one launcher runs at a time; a second copy exits quietly.
 
-## Controls
+## Key Bindings
 
-- `Down`, `Right`, `RightShift`, `PageDown`: Next table
-- `Up`, `Left`, `LeftShift`, `PageUp`: Previous table
-- Mouse wheel: Navigate tables
-- `Enter` or `Space`: Launch selected table
-- `R`: Record preview video for the selected table
-- `1` or `NumPad1`: Jump to a random table
-- `LeftCtrl` or `RightCtrl`: Toggle sort mode
-- `Escape`: Exit the launcher
+All keys live in the `KeyBindings` list in `config.json`. The defaults reproduce the original controls plus three program chords:
+
+```json
+"KeyBindings": [
+  { "Keys": ["Down", "Right", "RightShift", "PageDown"], "Action": "NextTable" },
+  { "Keys": ["Up", "Left", "LeftShift", "PageUp"],       "Action": "PreviousTable" },
+  { "Keys": ["Enter", "Space", "1", "NumPad1"],          "Action": "LaunchTable" },
+  { "Keys": "F12",                                       "Action": "RandomTable" },
+  { "Keys": ["LeftCtrl", "RightCtrl"],                   "Action": "ToggleSort" },
+  { "Keys": "R",                                         "Action": "RecordPreview" },
+  { "Keys": "Escape",                                    "Action": "Exit" },
+  { "Keys": "5+Left",                                    "Action": "VolumeDown" },
+  { "Keys": "5+Right",                                   "Action": "VolumeUp" },
+  { "Keys": "F12+1", "Action": "Run",
+    "Command": "C:\\Devil's Crush\\devils-crush.exe",
+    "Arguments": "--cabinet --music-voice-overlay",
+    "WorkingDirectory": "C:\\Devil's Crush" },
+  { "Keys": "F12+5", "Action": "Run", "Command": "C:\\Alien Crush\\Launch-Cabinet.cmd" },
+  { "Keys": "F12+Escape", "Action": "Run", "Command": "C:\\Tetris\\TetrisOLED\\bin\\Debug\\net8.0-windows\\TetrisOLED.exe" }
+]
+```
+
+Mouse wheel navigation is always on.
+
+### Keys
+
+- `Keys` is one key, a chord, or a list of keys that share the action.
+- Key names follow the WPF `Key` enumeration (`RightShift`, `LeftCtrl`, `PageDown`, `NumPad1`, `F12`, ...). Digits may be written `1` or `D1`. `Esc`, `Return`, `PgUp`, `PgDn`, `Del`, `Ins` are accepted aliases. Case does not matter.
+- A chord is two keys joined with `+`. The first is held as a modifier while the second is pressed, for example `F12+Escape`.
+- Single keys work only while the launcher has focus. Chords work everywhere, including while a table or another program is running, so they behave like global hotkeys. The chorded key is swallowed so nothing else reacts to it.
+- A modifier key keeps its own single-key action: a tap of `F12` on its own still picks a random table. That single action fires on release, only if no chord was pressed while the key was held. While a modifier is held, its partner keys are not treated as launcher keys, so `F12+Enter` never launches a table.
+- A key may be a chord modifier and complete another chord at the same time. `5` starts `5+Left` and also completes `F12+5`.
+- Problems such as an unknown key or action, a key bound twice, or a `Run` entry with no `Command` are listed in one message at startup. Valid entries still load. The first binding of a key wins. A `Run` command whose file is missing is reported when its key is pressed.
+
+### Actions
+
+- `NextTable`, `PreviousTable`, `LaunchTable`, `RandomTable`, `ToggleSort`, `RecordPreview`: the launcher's own functions.
+- `Exit`: closes the launcher.
+- `Run`: starts a program the same way a table is started. The launcher drops out of the way, waits for the program's main window (its largest visible window, so splash and helper windows are ignored), gives it a second to settle, brings it to the front, and keeps re-checking for up to 10 seconds until the program verifiably holds the foreground. It then waits for the program to finish and restores itself. Fields: `Command` (required), `Arguments`, `WorkingDirectory`, `WaitForProcess`, `SingleInstance`, `ShowConsole`.
+  - The launched process is placed in a job object, so a batch file or wrapper that exits immediately still counts as running until everything it started has finished. Nothing needs to be configured for `.cmd` launchers.
+  - `WaitForProcess`: wait on and activate this process name instead, for programs that deliberately detach from their parent.
+  - `SingleInstance`: if the program is already running, bring it to the front instead of starting another copy.
+  - `ShowConsole`: console windows are hidden by default, both the one Windows opens for a console-subsystem program or a batch file and any the program opens later. Set this to `true` for a program that needs its console visible.
+- `KillTable`: ends Visual Pinball X. Works while a table is running.
+- `VolumeUp`, `VolumeDown`: master volume, one bar at a time, with the on-screen overlay. Work while a table is running.
+- `ShutdownPc`, `RestartPc`: power off or restart the PC. Work while a table is running.
+
+While a table or a `Run` program is on screen, only `KillTable`, the volume actions, and the power actions respond.
+
+## Starting the launcher with a hotkey
+
+`ReturnToLauncher.exe` is an optional windowless helper built next to the launcher. It waits for `ReturnToLauncherHotkey` (default `F12+Enter`), then starts the launcher, or brings it to the front if it is already running. It reads the same `config.json`, only swallows the chorded key, so a bare `F12` still reaches whatever is focused, and needs nothing else installed.
+
+To have the hotkey available from logon, put a shortcut to `ReturnToLauncher.exe` in the Startup folder (`shell:startup`). Only one copy runs at a time. Pass `--once` to have it exit after the first launch, and `--config` or `--launcher` to point it at files elsewhere.
+
+### Troubleshooting focus
+
+The launcher writes `launcher.log` next to the executable (or under `%LOCALAPPDATA%\VirtualPinballLauncher` if that folder is read-only), truncated at every start. It records every chord the keyboard hook saw and each program launch: which window was chosen, whether Windows granted it the foreground, and whether the launcher got keyboard focus back afterwards, with a snapshot of the visible windows from front to back. If a program opens behind the launcher or the launcher ignores keys after a program exits, that file says which window held the foreground at the time. A chord that produced no `Chord` line never reached the launcher.
+
+Stop any AutoHotkey script that binds the same keys. Two global hooks competing for `F12` means whichever one wins launches the program, and a program started by a background script opens behind the launcher because Windows only lets the foreground process hand out activation.
+
+The launcher protects itself against two ways a global hook goes wrong. If a key release is lost, for example during a game's display mode switch, the chord state resets on the next modifier press and a modifier that is no longer physically held is dropped. If Windows silently removes the hook, the next key that reaches the launcher window reinstalls it. Both events are logged.
 
 ## Sorting and Stats
 
