@@ -48,15 +48,6 @@ public partial class MainWindow : Window
     private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
 
     [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    private const int SW_RESTORE = 9;
-
-    [DllImport("user32.dll")]
     private static extern int ShowCursor(bool bShow);
 
     private bool cursorHidden;
@@ -502,9 +493,11 @@ public partial class MainWindow : Window
             await RefreshPreviewAsync();
             if (isClosed) return;
             SuspendWindows();
+            // Let WPF paint the loading overlays before VPX starts consuming the desktop.
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
 
             var stopwatch = Stopwatch.StartNew();
-            using var process = Process.Start(psi)
+            using var process = await Task.Run(() => Process.Start(psi))
                 ?? throw new InvalidOperationException("Failed to start VPX.");
             using var focusCancellation = new CancellationTokenSource();
             var focusTask = FocusPlayerWindowAsync(process, focusCancellation.Token);
@@ -554,15 +547,19 @@ public partial class MainWindow : Window
             {
                 await Task.Delay(500, token);
                 if (isClosed || process.HasExited) return;
-                var hwnd = FindWindow(null, "Visual Pinball Player");
-                if (hwnd == IntPtr.Zero) continue;
-
-                await Task.Delay(1000, token);
-                if (isClosed || process.HasExited) return;
-                ShowWindow(hwnd, SW_RESTORE);
-                SetForegroundWindow(hwnd);
-                OnExternalWindowActivated();
-                return;
+                // Activating a window in another process can wait for that window's
+                // message loop. VPX may not pump messages while a table is loading,
+                // so keep the WPF dispatcher free to animate the loading overlay.
+                var activated = await Task.Run(() =>
+                {
+                    var hwnd = FindWindow(null, "Visual Pinball Player");
+                    return hwnd != IntPtr.Zero && WindowActivation.TryActivate(hwnd);
+                }, token);
+                if (activated && !isClosed && !token.IsCancellationRequested)
+                {
+                    OnExternalWindowActivated();
+                    return;
+                }
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
