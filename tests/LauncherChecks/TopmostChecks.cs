@@ -15,8 +15,13 @@ internal static class TopmostChecks
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOPMOST = 0x00000008;
 
+    private const uint GW_HWNDPREV = 3;
+
     [DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
 
     public static void Run()
     {
@@ -70,6 +75,12 @@ internal static class TopmostChecks
             await SettleAsync();
             Console.WriteLine($"STATE after Topmost=true: main={IsTopmost(main)} overlay={IsTopmost(overlay)}");
 
+            // Startup: the table name banner must be in front even if Windows refuses activation.
+            Invoke(main, "RequestInputFocus");
+            await SettleAsync();
+            Check(IsTopmost(main) && IsTopmost(overlay) && IsInFront(overlay, main),
+                "Startup stacks the table name overlay in front of the topmost launcher window");
+
             for (var cycle = 1; cycle <= 3; cycle++)
             {
                 Invoke(main, "SuspendWindows");
@@ -86,6 +97,7 @@ internal static class TopmostChecks
                 await Task.Delay(500);
                 await SettleAsync();
                 Check(dmd.IsVisible, $"Cycle {cycle}: restoring shows the DMD window again");
+                Check(IsInFront(overlay, main), $"Cycle {cycle}: restoring keeps the table name overlay in front of the launcher window");
                 if (WindowActivation.IsForeground(new WindowInteropHelper(main).Handle))
                     Check(IsTopmost(main) && IsTopmost(dmd) && IsTopmost(overlay),
                         $"Cycle {cycle}: restoring makes the launcher windows and the owned video overlay topmost again");
@@ -103,6 +115,15 @@ internal static class TopmostChecks
 
     private static bool IsTopmost(Window window) =>
         (GetWindowLong(new WindowInteropHelper(window).Handle, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+
+    /// <summary>Whether <paramref name="front"/> is above <paramref name="back"/> in the desktop z-order.</summary>
+    private static bool IsInFront(Window front, Window back)
+    {
+        var frontHwnd = new WindowInteropHelper(front).Handle;
+        for (var hwnd = GetWindow(new WindowInteropHelper(back).Handle, GW_HWNDPREV); hwnd != IntPtr.Zero; hwnd = GetWindow(hwnd, GW_HWNDPREV))
+            if (hwnd == frontHwnd) return true;
+        return false;
+    }
 
     private static void Invoke(MainWindow main, string name) =>
         typeof(MainWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(main, null);

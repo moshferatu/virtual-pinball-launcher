@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using VirtualPinballLauncher.Input;
 using MessageBox = System.Windows.MessageBox;
@@ -81,16 +82,62 @@ public partial class MainWindow : Window
         ContentRendered += (_, _) => RequestInputFocus();
     }
 
+    // How long to keep asking for the foreground when Windows refuses it, for example
+    // because the desktop was clicked while the launcher was starting.
+    private const int FocusRetries = 40;
+    private static readonly TimeSpan FocusRetryDelay = TimeSpan.FromMilliseconds(250);
+    private int focusRequest;
+
     private void RequestInputFocus()
     {
         // VideoView creates a separate overlay window during loading. Let those
         // Loaded/render callbacks finish before choosing the keyboard input window.
-        _ = Dispatcher.InvokeAsync(() =>
+        var request = ++focusRequest;
+        _ = Dispatcher.InvokeAsync(() => FocusLauncherAsync(request), DispatcherPriority.ContextIdle);
+    }
+
+    private async Task FocusLauncherAsync(int request)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        for (var attempt = 0; ; attempt++)
         {
-            if (isClosed || launchInProgress || !IsVisible || !IsEnabled) return;
-            Activate();
+            // A newer request, a launch, or shutdown takes over from this one.
+            if (request != focusRequest || isClosed || launchInProgress || !IsVisible || !IsEnabled) return;
+
+            // WPF's Activate() gives up silently when Windows holds the foreground for
+            // another process, so use the activation that works around that lock.
+            var foreground = WindowActivation.IsForeground(hwnd) || WindowActivation.TryActivate(hwnd);
+            KeepOverlayInFront();
             Keyboard.Focus(this);
-        }, DispatcherPriority.ContextIdle);
+
+            if (foreground)
+            {
+                if (attempt > 0) LauncherLog.Info($"Launcher took the foreground after {attempt + 1} attempts.");
+                return;
+            }
+            if (attempt == 0)
+                LauncherLog.Info($"Windows refused the foreground to the launcher; retrying.{Environment.NewLine}{WindowActivation.ZOrderSnapshot()}");
+            if (attempt + 1 >= FocusRetries)
+            {
+                LauncherLog.Info($"Launcher could not take the foreground.{Environment.NewLine}{WindowActivation.ZOrderSnapshot()}");
+                return;
+            }
+            await Task.Delay(FocusRetryDelay);
+        }
+    }
+
+    /// <summary>
+    /// The table name banner lives in the video view's own overlay window. Windows only
+    /// lifts that owned window above the launcher when the launcher is activated, so when
+    /// activation is refused the topmost launcher covers the banner. Stack it explicitly.
+    /// </summary>
+    private void KeepOverlayInFront()
+    {
+        if (!Topmost) return;
+        WindowActivation.BringToFrontOfTopmost(new WindowInteropHelper(this).Handle);
+        foreach (Window owned in OwnedWindows)
+            if (owned.IsVisible)
+                WindowActivation.BringToFrontOfTopmost(new WindowInteropHelper(owned).Handle);
     }
 
     protected override async void OnClosing(CancelEventArgs e)
@@ -139,6 +186,7 @@ public partial class MainWindow : Window
         if (isClosed) return;
         WindowState = WindowState.Maximized;
         Topmost = true;
+        KeepOverlayInFront();
 
         Cursor = Cursors.None;
         ForceHideCursor();
@@ -445,6 +493,7 @@ public partial class MainWindow : Window
             overlay.SetLoading(false);
             window.Topmost = true;
         }
+        KeepOverlayInFront();
         RequestInputFocus();
     }
 

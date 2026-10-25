@@ -29,6 +29,8 @@ public static class WindowActivation
     private static readonly IntPtr HWND_TOP = IntPtr.Zero;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int Left, Top, Right, Bottom; }
@@ -90,6 +92,16 @@ public static class WindowActivation
     /// Windows would otherwise refuse it. Only works while this process holds the foreground.
     /// </summary>
     public static bool AllowAnyProcessToTakeForeground() => AllowSetForegroundWindow(ASFW_ANY);
+
+    /// <summary>
+    /// Moves the window to the front of the always-on-top layer without activating it.
+    /// Calling this for several windows in turn stacks the last one in front.
+    /// </summary>
+    public static void BringToFrontOfTopmost(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !IsWindow(hwnd)) return;
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
 
     /// <summary>Tries to make the window the foreground window. Returns whether it is afterwards.</summary>
     public static bool TryActivate(IntPtr hwnd)
