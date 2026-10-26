@@ -173,14 +173,6 @@ While a table or a `Run` program is on screen, only `KillTable`, the volume acti
 
 To have the hotkey available from logon, put a shortcut to `ReturnToLauncher.exe` in the Startup folder (`shell:startup`). Only one copy runs at a time. Pass `--once` to have it exit after the first launch, and `--config` or `--launcher` to point it at files elsewhere.
 
-### Troubleshooting focus
-
-The launcher writes `launcher.log` next to the executable (or under `%LOCALAPPDATA%\VirtualPinballLauncher` if that folder is read-only), truncated at every start. It records every chord the keyboard hook saw and each program launch: which window was chosen, whether Windows granted it the foreground, and whether the launcher got keyboard focus back afterwards, with a snapshot of the visible windows from front to back. If a program opens behind the launcher or the launcher ignores keys after a program exits, that file says which window held the foreground at the time. A chord that produced no `Chord` line never reached the launcher.
-
-Stop any AutoHotkey script that binds the same keys. Two global hooks competing for `F12` means whichever one wins launches the program, and a program started by a background script opens behind the launcher because Windows only lets the foreground process hand out activation.
-
-The launcher protects itself against two ways a global hook goes wrong. If a key release is lost, for example during a game's display mode switch, the chord state resets on the next modifier press and a modifier that is no longer physically held is dropped. If Windows silently removes the hook, the next key that reaches the launcher window reinstalls it. Both events are logged.
-
 ## Sorting and Stats
 
 The launcher starts in popularity sort mode.
