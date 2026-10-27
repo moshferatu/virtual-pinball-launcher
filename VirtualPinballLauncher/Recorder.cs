@@ -15,17 +15,14 @@ public static class Recorder
         if (!File.Exists(vpxPath))
             throw new FileNotFoundException("VPX table not found.", vpxPath);
 
-        if (string.IsNullOrWhiteSpace(config.VideosDirectory))
-            throw new ArgumentException("VideosDirectory is not set in config.json.", nameof(config.VideosDirectory));
-
-        if (string.IsNullOrWhiteSpace(config.BackglassVideosDirectory))
-            throw new ArgumentException("BackglassVideosDirectory is not set in config.json.", nameof(config.BackglassVideosDirectory));
+        if (string.IsNullOrWhiteSpace(config.PreviewsDirectory))
+            throw new ArgumentException("PreviewsDirectory is not set in config.json.", nameof(config.PreviewsDirectory));
 
         string backglassDeviceName = ScreenSize.GetBackglassMonitorDeviceName()
             ?? throw new InvalidOperationException("No backglass monitor could be detected.");
 
-        Directory.CreateDirectory(config.VideosDirectory);
-        Directory.CreateDirectory(config.BackglassVideosDirectory);
+        Directory.CreateDirectory(config.PlayfieldPreviewsDirectory);
+        Directory.CreateDirectory(config.BackglassPreviewsDirectory);
 
         var vpx = Process.Start(new ProcessStartInfo
         {
@@ -42,11 +39,7 @@ public static class Recorder
         {
             await Task.Delay(TimeSpan.FromSeconds(config.RecordDelaySeconds));
 
-            var tableName = Path.GetFileNameWithoutExtension(vpxPath);
-            var extension = string.IsNullOrWhiteSpace(config.VideoExtension) ? ".mp4" : config.VideoExtension;
-
-            var playfieldFile = Path.Combine(config.VideosDirectory, tableName + extension);
-            var backglassFile = Path.Combine(config.BackglassVideosDirectory, tableName + extension);
+            var (playfieldFile, backglassFile) = config.PreviewVideoPaths(Path.GetFileNameWithoutExtension(vpxPath));
 
             await RecordedPreview.RecordPairAsync(playfieldFile, backglassFile,
                 (playfieldTemp, backglassTemp) => RecordScreensAsync(config, backglassDeviceName, playfieldTemp, backglassTemp));

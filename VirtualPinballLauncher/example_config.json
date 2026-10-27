@@ -1,7 +1,6 @@
 {
   "TablesDirectory": "D:\\Pinball\\Tables",
-  "VideosDirectory": "D:\\Pinball\\Videos",
-  "BackglassVideosDirectory": "D:\\Pinball\\BackglassVideos",
+  "PreviewsDirectory": "D:\\Pinball\\Previews",
   "VpxExePath": "C:\\Visual Pinball\\VPinballX64.exe",
   "VideoExtension": ".mp4",
   "RecordSeconds": 30,

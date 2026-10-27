@@ -73,8 +73,7 @@ Example:
 ```json
 {
   "TablesDirectory": "D:\\Pinball\\Tables",
-  "VideosDirectory": "D:\\Pinball\\Videos",
-  "BackglassVideosDirectory": "D:\\Pinball\\BackglassVideos",
+  "PreviewsDirectory": "D:\\Pinball\\Previews",
   "VpxExePath": "C:\\Visual Pinball\\VPinballX64.exe",
   "VideoExtension": ".mp4",
   "RecordSeconds": 30,
@@ -89,8 +88,7 @@ See `VirtualPinballLauncher/example_config.json` for the full file.
 ### Config Fields
 
 - `TablesDirectory`: Folder containing `.vpx` tables. Only the top level is scanned.
-- `VideosDirectory`: Folder containing playfield preview videos.
-- `BackglassVideosDirectory`: Folder containing backglass preview videos. Leave empty if you do not use backglass previews.
+- `PreviewsDirectory`: Folder containing preview videos, with playfield videos in its `Playfield` subfolder and backglass videos in its `Backglass` subfolder.
 - `VpxExePath`: Full path to the Visual Pinball X executable.
 - `VideoExtension`: Extension used when matching preview files, such as `.mp4`.
 - `RecordSeconds`: Length of recorded preview videos.
@@ -107,8 +105,8 @@ Tables and videos are matched by base filename.
 Example:
 
 - `TablesDirectory\Attack From Mars.vpx`
-- `VideosDirectory\Attack From Mars.mp4`
-- `BackglassVideosDirectory\Attack From Mars.mp4`
+- `PreviewsDirectory\Playfield\Attack From Mars.mp4`
+- `PreviewsDirectory\Backglass\Attack From Mars.mp4`
 
 If a matching preview or backglass video is missing, the launcher simply shows no video for that display.
 
@@ -194,7 +192,7 @@ Press `R` on a selected table to record new preview media. The launcher starts a
 1. Launches the selected VPX table.
 2. Waits for `RecordDelaySeconds`.
 3. Records the primary display as the playfield preview.
-4. Records the detected backglass display in parallel if `BackglassVideosDirectory` is configured.
+4. Records the detected backglass display at the same time.
 5. Stops VPX and common PinUp Player processes after recording completes.
 
 You can also call record mode directly:
@@ -205,8 +203,8 @@ VirtualPinballLauncher.exe --record "D:\Pinball\Tables\Example Table.vpx"
 
 Recorded files are written to:
 
-- `VideosDirectory\<TableName><VideoExtension>`
-- `BackglassVideosDirectory\<TableName><VideoExtension>` when backglass recording is enabled
+- `PreviewsDirectory\Playfield\<TableName><VideoExtension>`
+- `PreviewsDirectory\Backglass\<TableName><VideoExtension>`
 
 ## Display Behavior
 

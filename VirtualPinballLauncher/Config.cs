@@ -20,12 +20,25 @@ public sealed class Config
     };
 
     public string TablesDirectory { get; set; } = "";
-    public string VideosDirectory { get; set; } = "";
-    public string BackglassVideosDirectory { get; set; } = "";
+    /// <summary>Holds the Playfield and Backglass preview video folders.</summary>
+    public string PreviewsDirectory { get; set; } = "";
     public string VpxExePath { get; set; } = @"";
     public string VideoExtension { get; set; } = ".mp4";
     public int RecordSeconds { get; set; } = 30;
     public int RecordDelaySeconds { get; set; } = 10;
+
+    [JsonIgnore]
+    public string PlayfieldPreviewsDirectory => Path.Combine(PreviewsDirectory, "Playfield");
+
+    [JsonIgnore]
+    public string BackglassPreviewsDirectory => Path.Combine(PreviewsDirectory, "Backglass");
+
+    /// <summary>The playfield and backglass video paths for a table, by its file name.</summary>
+    public (string Playfield, string Backglass) PreviewVideoPaths(string tableName)
+    {
+        var file = tableName + (string.IsNullOrWhiteSpace(VideoExtension) ? ".mp4" : VideoExtension);
+        return (Path.Combine(PlayfieldPreviewsDirectory, file), Path.Combine(BackglassPreviewsDirectory, file));
+    }
 
     /// <summary>Every key the launcher reacts to, including global chords.</summary>
     public List<KeyBinding> KeyBindings { get; set; } = DefaultKeyBindings();
@@ -81,8 +94,11 @@ public sealed class Config
     public static Config Deserialize(string json) =>
         JsonSerializer.Deserialize<Config>(json, SerializerOptions) ?? new Config();
 
+    private static readonly string[] RemovedFields =
+        { "ReturnToLauncherHotkey", "VideosDirectory", "BackglassVideosDirectory" };
+
     private static bool IsRemovedField(string name) =>
-        name.Equals("ReturnToLauncherHotkey", StringComparison.OrdinalIgnoreCase);
+        RemovedFields.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     private static bool HasProperty(string json, string name)
     {

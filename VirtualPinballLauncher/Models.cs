@@ -16,20 +16,17 @@ public static class TableScanner
         if (!Directory.Exists(cfg.TablesDirectory))
             yield break;
 
-        string videoExt = string.IsNullOrWhiteSpace(cfg.VideoExtension) ? ".mp4" : cfg.VideoExtension;
-
         foreach (var vpx in Directory.EnumerateFiles(cfg.TablesDirectory, "*.vpx", SearchOption.TopDirectoryOnly))
         {
             var name = Path.GetFileNameWithoutExtension(vpx);
 
-            string? preview = null;
-            if (!string.IsNullOrWhiteSpace(cfg.VideosDirectory))
-                preview = Path.Combine(cfg.VideosDirectory, name + videoExt);
+            if (string.IsNullOrWhiteSpace(cfg.PreviewsDirectory))
+            {
+                yield return new TableItem(vpx, name, null, null);
+                continue;
+            }
 
-            string? backglass = null;
-            if (!string.IsNullOrWhiteSpace(cfg.BackglassVideosDirectory))
-                backglass = Path.Combine(cfg.BackglassVideosDirectory, name + videoExt);
-
+            var (preview, backglass) = cfg.PreviewVideoPaths(name);
             yield return new TableItem(vpx, name, preview, backglass);
         }
     }
