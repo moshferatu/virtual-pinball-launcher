@@ -56,6 +56,17 @@ To publish a self-contained copy outside the repository:
 powershell -ExecutionPolicy Bypass -File tools\Publish-Launcher.ps1 -Destination C:\vPinball\Launcher
 ```
 
+Add `-SingleFile` to pack each program into one exe, and `-FrameworkDependent` to use an installed .NET 8 Desktop Runtime (`winget install Microsoft.DotNet.DesktopRuntime.8`) instead of bundling it. Approximate sizes:
+
+| Options | Size |
+|---|---|
+| none (self-contained folder) | 203 MB |
+| `-SingleFile` (compressed; each exe carries its own .NET) | 179 MB |
+| `-FrameworkDependent` | 43 MB |
+| `-SingleFile -FrameworkDependent` | 43 MB |
+
+The `libvlc` folder, `ScreenRecorderLib.dll` and `flipper.wav` always sit next to the launcher, because VLC loads its plugins from disk and ScreenRecorderLib can't load from inside a single-file exe. Only the VLC plugins needed for local preview files are shipped (see the list in `VirtualPinballLauncher.csproj`). If a preview format stops playing, add the missing plugin there.
+
 ## Configuration
 
 On first launch, the app creates `config.json` next to the executable if it does not already exist. Update that file before using the launcher.

@@ -8,6 +8,12 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Publish-Launcher.ps1 publishes ReturnToLauncher on its own with matching settings. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+    <!-- Keep line numbers in logged stack traces without shipping separate .pdb or .xml files. -->
+    <DebugType>embedded</DebugType>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="LibVLCSharp" Version="3.9.5" />
@@ -16,16 +22,52 @@
     <PackageReference Include="ScreenRecorderLib" Version="6.6.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
   </ItemGroup>
+  <!--
+    Ship only the VLC plugins needed to play local preview files (about 42 MB instead of 102 MB).
+    Network access, streaming output, encoders, Lua, subtitles and visualizations are left out.
+    If a preview format stops playing, add the plugin it needs from the package's build\x64 folder.
+  -->
+  <ItemGroup>
+    <VlcWindowsX64IncludeFiles Include="libvlc.dll;libvlccore.dll" />
+    <VlcWindowsX64IncludeFiles Include="plugins\access\libfilesystem_plugin.dll" />
+    <VlcWindowsX64IncludeFiles Include="plugins\audio_filter\%2A;plugins\audio_mixer\%2A;plugins\audio_output\%2A" />
+    <VlcWindowsX64IncludeFiles Include="plugins\codec\libavcodec_plugin.dll;plugins\codec\libd3d11va_plugin.dll;plugins\codec\libdxva2_plugin.dll;plugins\codec\libdav1d_plugin.dll" />
+    <VlcWindowsX64IncludeFiles Include="plugins\codec\libaraw_plugin.dll;plugins\codec\liblpcm_plugin.dll;plugins\codec\libmpg123_plugin.dll;plugins\codec\libopus_plugin.dll;plugins\codec\libvorbis_plugin.dll;plugins\codec\libflac_plugin.dll" />
+    <VlcWindowsX64IncludeFiles Include="plugins\codec\librawvideo_plugin.dll;plugins\codec\libddummy_plugin.dll" />
+    <VlcWindowsX64IncludeFiles Include="plugins\d3d11\%2A;plugins\d3d9\%2A;plugins\demux\%2A;plugins\packetizer\%2A;plugins\stream_filter\%2A" />
+    <VlcWindowsX64IncludeFiles Include="plugins\video_chroma\%2A;plugins\video_filter\%2A;plugins\video_output\%2A;plugins\logger\%2A;plugins\spu\%2A" />
+    <VlcWindowsX64ExcludeFiles Include="plugins\demux\libadaptive_plugin.dll;plugins\demux\libgme_plugin.dll;plugins\demux\libmod_plugin.dll;plugins\video_output\libcaca_plugin.dll" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\VirtualPinballLauncher.Input\VirtualPinballLauncher.Input.csproj" />
-    <!-- Builds the desktop-side companion next to the launcher so shell mode can start it. -->
-    <ProjectReference Include="..\ReturnToLauncher\ReturnToLauncher.csproj" />
+    <!-- Builds the optional desktop hotkey helper next to the launcher. A single-file publish leaves it out
+         so it isn't packed inside the launcher; Publish-Launcher.ps1 publishes it separately. -->
+    <ProjectReference Include="..\ReturnToLauncher\ReturnToLauncher.csproj" Condition="'$(PublishSingleFile)' != 'true'" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="flipper.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
+  <!--
+    In a single-file publish these must stay as files next to the exe: VLC loads its plugins from the
+    libvlc folder, and ScreenRecorderLib is a mixed native/managed DLL that can't load from inside the bundle.
+  -->
+  <Target Name="KeepNativeFilesOutsideSingleFile" AfterTargets="CollectVlcFilesToCopyWindows">
+    <ItemGroup>
+      <Content Condition="$([System.String]::Copy('%(Content.Link)').StartsWith('libvlc'))">
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </Content>
+    </ItemGroup>
+  </Target>
+  <Target Name="KeepScreenRecorderOutsideSingleFile" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths Condition="'%(Filename)' == 'ScreenRecorderLib'">
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ReferenceCopyLocalPaths>
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <Resource Include="Digital Dot Roadsign.otf" />
   </ItemGroup>
