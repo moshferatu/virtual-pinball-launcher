@@ -40,7 +40,7 @@
     <ProjectReference Include="..\VirtualPinballLauncher.Input\VirtualPinballLauncher.Input.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="flipper.wav">
+    <Content Include="resources\flipper.wav" Link="flipper.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
@@ -64,6 +64,6 @@
     </ItemGroup>
   </Target>
   <ItemGroup>
-    <Resource Include="Digital Dot Roadsign.otf" />
+    <Resource Include="resources\Digital Dot Roadsign.otf" Link="Digital Dot Roadsign.otf" />
   </ItemGroup>
 </Project>
