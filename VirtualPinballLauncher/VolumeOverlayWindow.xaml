@@ -13,11 +13,8 @@
     <Grid>
         <Border x:Name="VolumePanel"
                 VerticalAlignment="Bottom"
-                Background="Black"
-                BorderBrush="Red"
                 BorderThickness="0,10,0,10"
                 Padding="24"
-                Margin="0,0,0,200"
                 Visibility="Collapsed">
             <Grid>
                 <!-- Hidden spacer matches the table name overlay's height so the volume

@@ -40,6 +40,9 @@ public sealed class Config
         return (Path.Combine(PlayfieldPreviewsDirectory, file), Path.Combine(BackglassPreviewsDirectory, file));
     }
 
+    /// <summary>Colors and placement of the overlays.</summary>
+    public Appearance Appearance { get; set; } = new();
+
     /// <summary>Every key the launcher reacts to, including global chords.</summary>
     public List<KeyBinding> KeyBindings { get; set; } = DefaultKeyBindings();
 
@@ -75,12 +78,14 @@ public sealed class Config
         var json = await File.ReadAllTextAsync(path);
         var loaded = JsonSerializer.Deserialize<Config>(json, SerializerOptions) ?? new Config();
 
-        // Older files predate the key binding list. Write the defaults back so the
-        // section is visible and editable without hand-typing it. Settings this
-        // launcher no longer has are dropped at the same time.
+        loaded.Appearance ??= new Appearance();
+
+        // Older files predate the key binding list and the appearance section. Write
+        // the defaults back so those sections are visible and editable without
+        // hand-typing them. Settings this launcher no longer has are dropped at the same time.
         var removed = loaded.AdditionalFields?.Keys.Where(IsRemovedField).ToList() ?? new();
         foreach (var name in removed) loaded.AdditionalFields!.Remove(name);
-        if (!HasProperty(json, nameof(KeyBindings)) || removed.Count > 0)
+        if (!HasProperty(json, nameof(KeyBindings)) || !HasProperty(json, nameof(Appearance)) || removed.Count > 0)
             await SaveAsync(path, loaded);
 
         return loaded;
@@ -91,8 +96,12 @@ public sealed class Config
 
     public static string Serialize(Config config) => JsonSerializer.Serialize(config, SerializerOptions);
 
-    public static Config Deserialize(string json) =>
-        JsonSerializer.Deserialize<Config>(json, SerializerOptions) ?? new Config();
+    public static Config Deserialize(string json)
+    {
+        var config = JsonSerializer.Deserialize<Config>(json, SerializerOptions) ?? new Config();
+        config.Appearance ??= new Appearance();
+        return config;
+    }
 
     private static readonly string[] RemovedFields =
         { "ReturnToLauncherHotkey", "VideosDirectory", "BackglassVideosDirectory" };

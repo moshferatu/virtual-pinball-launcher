@@ -24,7 +24,6 @@
                     <Viewbox Stretch="Uniform" StretchDirection="DownOnly"
                              HorizontalAlignment="Center">
                         <TextBlock x:Name="TableTitleText"
-                                   Foreground="Yellow"
                                    FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
                                    FontSize="125"
                                    FontWeight="Normal"/>
@@ -32,7 +31,6 @@
                 </Grid>
 
                 <TextBlock x:Name="PropertiesText"
-                           Foreground="White"
                            FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
                            FontSize="80"
                            LineStackingStrategy="BlockLineHeight"
@@ -41,9 +39,9 @@
                            TextAlignment="Center"
                            TextWrapping="Wrap"
                            Visibility="Collapsed">
-                    <Run Text="Times Played: " Foreground="DimGray"/><Run x:Name="TimesPlayedValue"/><LineBreak/>
-                    <Run Text="Total Time Played: " Foreground="DimGray"/><Run x:Name="TotalTimePlayedValue"/><LineBreak/>
-                    <Run Text="Last Played: " Foreground="DimGray"/><Run x:Name="LastPlayedValue"/>
+                    <Run x:Name="TimesPlayedLabel" Text="Times Played: "/><Run x:Name="TimesPlayedValue"/><LineBreak/>
+                    <Run x:Name="TotalTimePlayedLabel" Text="Total Time Played: "/><Run x:Name="TotalTimePlayedValue"/><LineBreak/>
+                    <Run x:Name="LastPlayedLabel" Text="Last Played: "/><Run x:Name="LastPlayedValue"/>
                 </TextBlock>
             </StackPanel>
         </Border>

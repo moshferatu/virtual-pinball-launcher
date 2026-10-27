@@ -53,6 +53,7 @@ internal static class Program
             Check(overlay.Visibility == Visibility.Collapsed, "Loading completion hides the overlay");
 
             CheckDmdDisplay();
+            AppearanceChecks.Run(directory);
             KeyBindingChecks.Run();
             VolumeRepeatChecks.Run();
             ExternalProgramChecks.RunAsync(directory).GetAwaiter().GetResult();

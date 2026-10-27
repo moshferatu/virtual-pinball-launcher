@@ -5,10 +5,8 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using NAudio.CoreAudioApi;
-using Brushes = System.Windows.Media.Brushes;
-using Color = System.Windows.Media.Color;
+using Brush = System.Windows.Media.Brush;
 using Rectangle = System.Windows.Shapes.Rectangle;
-using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 
 namespace VirtualPinballLauncher;
 
@@ -37,8 +35,9 @@ public partial class VolumeOverlayWindow : Window
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOACTIVATE = 0x0010;
 
-    // Dim yellow for lines above the current level so the whole scale stays visible.
-    private static readonly SolidColorBrush UnfilledBrush = CreateFrozen(Color.FromArgb(0x40, 0xFF, 0xFF, 0x00));
+    // Lines above the current level use a dimmed title color so the whole scale stays visible.
+    private Brush filledBrush = null!;
+    private Brush unfilledBrush = null!;
 
     private MMDeviceEnumerator? deviceEnumerator;
     private MMDevice? device;
@@ -59,6 +58,7 @@ public partial class VolumeOverlayWindow : Window
     {
         InitializeComponent();
         BuildLines();
+        ApplyAppearance(new Appearance());
         repeatTimer.Tick += (_, _) => OnRepeatTick();
         SourceInitialized += OnSourceInitialized;
         SizeChanged += (_, _) => UpdateLineDimensions();
@@ -69,14 +69,21 @@ public partial class VolumeOverlayWindow : Window
     {
         for (int i = 0; i < LineCount; i++)
         {
-            var line = new Rectangle
-            {
-                Fill = UnfilledBrush,
-                VerticalAlignment = VerticalAlignment.Center
-            };
+            var line = new Rectangle { VerticalAlignment = VerticalAlignment.Center };
             lines[i] = line;
             VolumeBars.Children.Add(line);
         }
+    }
+
+    public void ApplyAppearance(Appearance appearance)
+    {
+        // Opaque so the table name overlay underneath never shows through.
+        VolumePanel.Background = appearance.OpaqueOverlayBackgroundBrush;
+        VolumePanel.BorderBrush = appearance.AccentBrush;
+        VolumePanel.Margin = new Thickness(0, 0, 0, appearance.SafeOverlayBottomMargin);
+        filledBrush = appearance.TitleBrush;
+        unfilledBrush = appearance.DimTitleBrush;
+        UpdateLines(GetCurrentVolume());
     }
 
     private void UpdateLineDimensions()
@@ -210,7 +217,7 @@ public partial class VolumeOverlayWindow : Window
         int filled = (int)Math.Round(volume / VolumeStep);
         for (int i = 0; i < LineCount; i++)
         {
-            lines[i].Fill = i < filled ? Brushes.Yellow : UnfilledBrush;
+            lines[i].Fill = i < filled ? filledBrush : unfilledBrush;
         }
     }
 
@@ -226,13 +233,6 @@ public partial class VolumeOverlayWindow : Window
 
         hideTimer?.Stop();
         hideTimer?.Start();
-    }
-
-    private static SolidColorBrush CreateFrozen(Color color)
-    {
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
     }
 
     private void OnClosed(object? sender, EventArgs e)

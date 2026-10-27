@@ -79,6 +79,14 @@ Example:
   "RecordSeconds": 30,
   "RecordDelaySeconds": 10,
   "FfmpegPath": "ffmpeg",
+  "Appearance": {
+    "AccentColor": "Red",
+    "TitleColor": "Yellow",
+    "OverlayBackground": "#DD000000",
+    "DmdLabelColor": "DimGray",
+    "DmdValueColor": "White",
+    "OverlayBottomMargin": 200
+  },
   "KeyBindings": [ ... ]
 }
 ```
@@ -94,9 +102,21 @@ See `VirtualPinballLauncher/example_config.json` for the full file.
 - `RecordSeconds`: Length of recorded preview videos.
 - `RecordDelaySeconds`: Delay after launching a table before recording starts.
 - `FfmpegPath`: `ffmpeg` executable name or full path.
+- `Appearance`: Colors and placement of the overlays. See Appearance below.
 - `KeyBindings`: Every key the launcher reacts to. See Key Bindings below.
 
 Relative `Command` paths are resolved next to the launcher executable. Fields this version does not know about are preserved when the file is rewritten. A `config.json` written by an older launcher gets the new sections added with their defaults on first load so they are visible and editable.
+
+### Appearance
+
+- `AccentColor`: Top and bottom borders of the table name and volume overlays.
+- `TitleColor`: Table name on the playfield and DMD, and the lit volume bars. Unlit bars use this color at a quarter of its opacity.
+- `OverlayBackground`: Panel behind the table name. The volume panel uses the same color without transparency, so the table name never shows through it.
+- `DmdLabelColor`: Stat labels on the DMD, such as `Times Played:`.
+- `DmdValueColor`: Stat values on the DMD.
+- `OverlayBottomMargin`: Distance from the bottom of the playfield screen to the table name and volume overlays.
+
+Colors can be names such as `Gold`, hex such as `#FFCC00`, or hex with alpha first such as `#DDFF0000`. A color that can't be read falls back to its default. Leaving a setting out also keeps its default.
 
 ## File Matching
 

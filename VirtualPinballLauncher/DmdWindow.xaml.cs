@@ -8,6 +8,17 @@ public partial class DmdWindow : Window
     public DmdWindow()
     {
         InitializeComponent();
+        ApplyAppearance(new Appearance());
+    }
+
+    public void ApplyAppearance(Appearance appearance)
+    {
+        TableTitleText.Foreground = appearance.TitleBrush;
+        PropertiesText.Foreground = appearance.DmdValueBrush;
+        var labelBrush = appearance.DmdLabelBrush;
+        TimesPlayedLabel.Foreground = labelBrush;
+        TotalTimePlayedLabel.Foreground = labelBrush;
+        LastPlayedLabel.Foreground = labelBrush;
     }
 
     public void ShowTableProperties(string tableDisplayName, TableStatsEntry? stats)

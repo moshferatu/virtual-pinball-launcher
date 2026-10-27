@@ -22,12 +22,11 @@
 
             <vlc:VideoView.Content>
                 <Grid>
-                    <Border VerticalAlignment="Bottom"
-                            Background="#DD000000"
-                            BorderBrush="Red"
+                    <!-- Colors and bottom margin come from Appearance in config.json. -->
+                    <Border x:Name="TableNameOverlay"
+                            VerticalAlignment="Bottom"
                             BorderThickness="0,10,0,10"
-                            Padding="24"
-                            Margin="0,0,0,200">
+                            Padding="24">
                         <Grid>
                             <TextBlock FontSize="250"
                                     FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
@@ -38,7 +37,6 @@
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center">
                                 <TextBlock x:Name="TableNameText"
-                                        Foreground="Yellow"
                                         FontSize="200"
                                         FontFamily="./Digital Dot Roadsign.otf#Digital Dot Roadsign"
                                         FontWeight="Normal"

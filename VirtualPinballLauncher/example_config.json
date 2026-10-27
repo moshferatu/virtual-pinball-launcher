@@ -6,6 +6,14 @@
   "RecordSeconds": 30,
   "RecordDelaySeconds": 10,
   "FfmpegPath": "ffmpeg",
+  "Appearance": {
+    "AccentColor": "Red",
+    "TitleColor": "Yellow",
+    "OverlayBackground": "#DD000000",
+    "DmdLabelColor": "DimGray",
+    "DmdValueColor": "White",
+    "OverlayBottomMargin": 200
+  },
   "KeyBindings": [
     { "Keys": ["Down", "Right", "RightShift", "PageDown"], "Action": "NextTable" },
     { "Keys": ["Up", "Left", "LeftShift", "PageUp"], "Action": "PreviousTable" },

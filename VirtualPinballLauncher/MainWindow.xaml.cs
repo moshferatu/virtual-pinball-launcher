@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     {
         this.previews = previews;
         InitializeComponent();
+        ApplyAppearance(new Appearance());
         PreviewPlayer.MediaPlayer = previews.Playfield.MediaPlayer;
         PreviewPlayer.Loaded += (_, _) => this.PreventOverlayActivation(LoadingOverlay);
         ContentRendered += (_, _) => RequestInputFocus();
@@ -203,6 +204,9 @@ public partial class MainWindow : Window
             config = await Config.LoadAsync(Config.DefaultPath);
             if (isClosed) return;
 
+            ApplyAppearance(config.Appearance);
+            dmdWindow?.ApplyAppearance(config.Appearance);
+            volumeOverlayWindow?.ApplyAppearance(config.Appearance);
             InstallKeyBindings(config.KeyBindings, problems);
 
             tableList = TableScanner.Scan(config).ToList();
@@ -229,6 +233,14 @@ public partial class MainWindow : Window
                 MessageBox.Show(string.Join("\n\n", problems), "Key Binding Problems", MessageBoxButton.OK, MessageBoxImage.Warning);
             RequestInputFocus();
         }
+    }
+
+    private void ApplyAppearance(Appearance appearance)
+    {
+        TableNameOverlay.Background = appearance.OverlayBackgroundBrush;
+        TableNameOverlay.BorderBrush = appearance.AccentBrush;
+        TableNameOverlay.Margin = new Thickness(0, 0, 0, appearance.SafeOverlayBottomMargin);
+        TableNameText.Foreground = appearance.TitleBrush;
     }
 
     private void InstallKeyBindings(IEnumerable<KeyBinding> bindings, List<string> problems)
