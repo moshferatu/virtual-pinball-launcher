@@ -14,7 +14,6 @@ public sealed class KeyBindingHost : IDisposable
 {
     private static readonly TimeSpan HookSilenceLimit = TimeSpan.FromSeconds(2);
 
-    private readonly KeyBindingMap map;
     private readonly Dispatcher dispatcher;
     private readonly ChordListener listener;
     private LowLevelKeyboardHook hook;
@@ -22,25 +21,18 @@ public sealed class KeyBindingHost : IDisposable
 
     public KeyBindingHost(KeyBindingMap map, Dispatcher dispatcher)
     {
-        this.map = map;
         this.dispatcher = dispatcher;
         listener = new ChordListener(map.Chords);
         listener.ChordPressed += chord =>
         {
             if (map.TryGetChord(chord, out var binding))
-            {
-                LauncherLog.Info($"Chord {chord} -> {binding.Action}");
                 dispatcher.BeginInvoke(() => ChordTriggered?.Invoke(binding));
-            }
         };
         listener.ModifierTapped += virtualKey =>
         {
             var key = KeyNames.FromVirtualKey(virtualKey);
-            LauncherLog.Info($"Modifier tap {KeyNames.ToName(key)}");
             dispatcher.BeginInvoke(() => ModifierTapped?.Invoke(key));
         };
-        listener.StaleModifierDropped += virtualKey =>
-            LauncherLog.Info($"Dropped stale modifier {KeyNames.ToName(KeyNames.FromVirtualKey(virtualKey))} (its release was never seen)");
         hook = new LowLevelKeyboardHook(listener.Handle);
     }
 
@@ -61,9 +53,7 @@ public sealed class KeyBindingHost : IDisposable
     public bool Start()
     {
         if (!listener.HasChords) return true;
-        var ok = hook.Start();
-        LauncherLog.Info(ok ? $"Keyboard hook installed for {map.Chords.Count} chord(s)." : "Keyboard hook was refused by Windows.");
-        return ok;
+        return hook.Start();
     }
 
     /// <summary>
@@ -77,11 +67,10 @@ public sealed class KeyBindingHost : IDisposable
         var silentFor = last == 0 ? TimeSpan.MaxValue : TimeSpan.FromTicks(DateTime.UtcNow.Ticks - last);
         if (hook.IsActive && silentFor < HookSilenceLimit) return;
 
-        LauncherLog.Info($"Keyboard hook missed a key the window received (active {hook.IsActive}, silent for {(silentFor == TimeSpan.MaxValue ? "ever" : silentFor.TotalSeconds.ToString("0.0") + "s")}); reinstalling.");
+        // The hook missed a key the window received, so reinstall it.
         hook.Dispose();
         hook = new LowLevelKeyboardHook(listener.Handle);
-        if (!hook.Start())
-            LauncherLog.Info("Keyboard hook reinstall was refused by Windows.");
+        hook.Start();
     }
 
     public void Dispose()

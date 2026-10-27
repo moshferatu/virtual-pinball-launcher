@@ -240,13 +240,10 @@ public static class ExternalProgram
 
         while (DateTime.UtcNow < deadline && stillRunning())
         {
-            if (spec.HideConsole && WindowActivation.HideConsoleWindows(processMatches) > 0)
-                LauncherLog.Info("Activate: hid a console window belonging to the program.");
+            if (spec.HideConsole) WindowActivation.HideConsoleWindows(processMatches);
             var window = WindowActivation.FindMainWindow(processMatches, out _);
             if (window != IntPtr.Zero)
             {
-                if (firstSeen == null)
-                    LauncherLog.Info($"Activate: program window appeared: {WindowActivation.Describe(window)}");
                 firstSeen ??= DateTime.UtcNow;
                 if (DateTime.UtcNow - firstSeen >= SettleDelay)
                 {
@@ -257,7 +254,6 @@ public static class ExternalProgram
                         if (!notified)
                         {
                             notified = true;
-                            LauncherLog.Info($"Activate: program holds the foreground: {WindowActivation.Describe(WindowActivation.ForegroundWindow)}");
                             onActivated?.Invoke();
                         }
                         if (DateTime.UtcNow - foregroundSince >= StableForeground) return;
@@ -265,20 +261,15 @@ public static class ExternalProgram
                     else
                     {
                         foregroundSince = null;
-                        var activated = WindowActivation.TryActivate(window);
-                        if (!activated)
-                            LauncherLog.Info($"Activate: attempt refused for {WindowActivation.Describe(window)}; foreground is {WindowActivation.Describe(WindowActivation.ForegroundWindow)}");
+                        WindowActivation.TryActivate(window);
                     }
                 }
             }
             await Task.Delay(250, token);
         }
 
-        if (!notified && firstSeen != null)
-        {
-            LauncherLog.Info("Activate: the program never held the foreground; carrying on anyway. " + WindowActivation.ZOrderSnapshot());
-            onActivated?.Invoke();
-        }
+        // The program never held the foreground; carry on anyway.
+        if (!notified && firstSeen != null) onActivated?.Invoke();
     }
 
     private static async Task<Process?> WaitForProcessAsync(string name, TimeSpan timeout, CancellationToken token)

@@ -110,18 +110,7 @@ public partial class MainWindow : Window
             KeepOverlayInFront();
             Keyboard.Focus(this);
 
-            if (foreground)
-            {
-                if (attempt > 0) LauncherLog.Info($"Launcher took the foreground after {attempt + 1} attempts.");
-                return;
-            }
-            if (attempt == 0)
-                LauncherLog.Info($"Windows refused the foreground to the launcher; retrying.{Environment.NewLine}{WindowActivation.ZOrderSnapshot()}");
-            if (attempt + 1 >= FocusRetries)
-            {
-                LauncherLog.Info($"Launcher could not take the foreground.{Environment.NewLine}{WindowActivation.ZOrderSnapshot()}");
-                return;
-            }
+            if (foreground || attempt + 1 >= FocusRetries) return;
             await Task.Delay(FocusRetryDelay);
         }
     }
@@ -632,12 +621,10 @@ public partial class MainWindow : Window
         {
             await RefreshPreviewAsync();
             if (isClosed) return;
-            LauncherLog.Info($"Run: {spec.Command} {spec.Arguments}");
             // The new process inherits the right to take the foreground from this one.
             WindowActivation.AllowAnyProcessToTakeForeground();
             SuspendWindows();
             await ExternalProgram.RunAsync(spec, () => Dispatcher.Invoke(OnExternalWindowActivated));
-            LauncherLog.Info("Run: program finished.");
         }
         catch (Exception ex)
         {

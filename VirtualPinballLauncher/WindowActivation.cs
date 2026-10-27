@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -19,7 +18,6 @@ public static class WindowActivation
     private const int SW_SHOW = 5;
     private const int SW_HIDE = 0;
     private const int GWL_EXSTYLE = -20;
-    private const int WS_EX_TOPMOST = 0x00000008;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int DWMWA_CLOAKED = 14;
@@ -67,12 +65,9 @@ public static class WindowActivation
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
-
-    public static IntPtr ForegroundWindow => GetForegroundWindow();
 
     public static int ForegroundProcessId
     {
@@ -193,43 +188,5 @@ public static class WindowActivation
             return true;
         }, IntPtr.Zero);
         return hidden;
-    }
-
-    /// <summary>One line describing a window for the log: handle, process, class, title, bounds, flags.</summary>
-    public static string Describe(IntPtr hwnd)
-    {
-        if (hwnd == IntPtr.Zero) return "none";
-        if (!IsWindow(hwnd)) return $"0x{hwnd:X} (destroyed)";
-        GetWindowThreadProcessId(hwnd, out var pid);
-        string process;
-        try { using var p = Process.GetProcessById(pid); process = p.ProcessName; }
-        catch { process = "?"; }
-        var className = new StringBuilder(64);
-        GetClassName(hwnd, className, className.Capacity);
-        var title = new StringBuilder(128);
-        GetWindowText(hwnd, title, title.Capacity);
-        GetWindowRect(hwnd, out var rect);
-        var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-        var flags = new StringBuilder();
-        if ((exStyle & WS_EX_TOPMOST) != 0) flags.Append(" topmost");
-        if ((exStyle & WS_EX_TOOLWINDOW) != 0) flags.Append(" tool");
-        if ((exStyle & WS_EX_NOACTIVATE) != 0) flags.Append(" noactivate");
-        if (!IsWindowVisible(hwnd)) flags.Append(" hidden");
-        return $"0x{hwnd:X} pid {pid} {process} [{className}] \"{title}\" ({rect.Left},{rect.Top})-({rect.Right},{rect.Bottom}){flags}";
-    }
-
-    /// <summary>The visible top-level windows from front to back, for the log.</summary>
-    public static string ZOrderSnapshot(int max = 12)
-    {
-        var lines = new List<string> { $"foreground: {Describe(GetForegroundWindow())}" };
-        EnumWindows((hwnd, _) =>
-        {
-            if (!IsWindowVisible(hwnd)) return true;
-            GetWindowRect(hwnd, out var rect);
-            if (rect.Right - rect.Left <= 0 || rect.Bottom - rect.Top <= 0) return true;
-            lines.Add("  " + Describe(hwnd));
-            return lines.Count <= max;
-        }, IntPtr.Zero);
-        return string.Join(Environment.NewLine, lines);
     }
 }
