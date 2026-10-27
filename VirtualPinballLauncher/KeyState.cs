@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace VirtualPinballLauncher.Input;
+namespace VirtualPinballLauncher;
 
 /// <summary>
 /// Reads the physical state of a key straight from Windows, independent of which

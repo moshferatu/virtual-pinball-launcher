@@ -37,9 +37,6 @@
     <VlcWindowsX64ExcludeFiles Include="plugins\demux\libadaptive_plugin.dll;plugins\demux\libgme_plugin.dll;plugins\demux\libmod_plugin.dll;plugins\video_output\libcaca_plugin.dll" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\VirtualPinballLauncher.Input\VirtualPinballLauncher.Input.csproj" />
-  </ItemGroup>
-  <ItemGroup>
     <Content Include="resources\flipper.wav" Link="flipper.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

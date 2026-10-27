@@ -1,7 +1,6 @@
 using System.IO;
 using System.Windows.Input;
 using VirtualPinballLauncher;
-using VirtualPinballLauncher.Input;
 using KeyBinding = VirtualPinballLauncher.KeyBinding;
 
 internal static class KeyBindingChecks

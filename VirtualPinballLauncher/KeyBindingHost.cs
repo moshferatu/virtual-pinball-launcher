@@ -1,6 +1,5 @@
 using System.Windows.Input;
 using System.Windows.Threading;
-using VirtualPinballLauncher.Input;
 
 namespace VirtualPinballLauncher;
 

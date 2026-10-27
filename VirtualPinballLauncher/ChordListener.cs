@@ -1,4 +1,4 @@
-namespace VirtualPinballLauncher.Input;
+namespace VirtualPinballLauncher;
 
 /// <summary>
 /// Turns a raw stream of key down/up events into chord presses and modifier taps.

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace VirtualPinballLauncher.Input;
+namespace VirtualPinballLauncher;
 
 /// <summary>
 /// A WH_KEYBOARD_LL hook running on its own thread with its own message loop, so a

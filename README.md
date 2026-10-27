@@ -22,7 +22,6 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 ## Project Layout
 
 - `VirtualPinballLauncher/` contains the WPF application.
-- `VirtualPinballLauncher.Input/` is a small library shared by the launcher and the checks: key chord parsing and the global keyboard hook.
 - `VirtualPinballLauncher/example_config.json` is the sample configuration.
 - `VirtualPinballLauncher/resources/` holds the DMD font and the flipper sound.
 - `tests/LauncherChecks/` holds the regression checks.

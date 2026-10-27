@@ -12,7 +12,6 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
-using VirtualPinballLauncher.Input;
 using MessageBox = System.Windows.MessageBox;
 using Cursors = System.Windows.Input.Cursors;
 

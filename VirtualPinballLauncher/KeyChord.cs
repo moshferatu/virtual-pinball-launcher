@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace VirtualPinballLauncher.Input;
+namespace VirtualPinballLauncher;
 
 /// <summary>
 /// A single key ("Escape") or a two-key chord ("F12+Escape"): the first key is held
