@@ -11,7 +11,6 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 - Tracks plays, total play time, and last played date in `table-stats.csv`.
 - Records new playfield and backglass preview videos through `ffmpeg`.
 - Every key is configurable in one `KeyBindings` list, including global chords such as `F12+1` that start other programs.
-- Optional desktop hotkey helper that starts or activates the launcher, with no AutoHotkey needed.
 
 ## Requirements
 
@@ -23,11 +22,10 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 ## Project Layout
 
 - `VirtualPinballLauncher/` contains the WPF application.
-- `VirtualPinballLauncher.Input/` is a small library shared by the launcher, the hotkey helper, and the checks: key chord parsing and the global keyboard hook.
-- `ReturnToLauncher/` is the optional windowless helper that waits on the desktop for a hotkey and starts or activates the launcher.
+- `VirtualPinballLauncher.Input/` is a small library shared by the launcher and the checks: key chord parsing and the global keyboard hook.
 - `VirtualPinballLauncher/example_config.json` is the sample configuration.
 - `tests/LauncherChecks/` holds the regression checks.
-- `tools/Publish-Launcher.ps1` publishes both executables into one folder.
+- `tools/Publish-Launcher.ps1` publishes the launcher into one folder.
 - `virtual-pinball-launcher.sln` is the solution file.
 
 ## Build
@@ -36,7 +34,7 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 dotnet build
 ```
 
-The app targets `net8.0-windows` and uses WPF. Building the launcher also builds `ReturnToLauncher.exe` into the same output folder.
+The app targets `net8.0-windows` and uses WPF.
 
 Run the regression checks with:
 
@@ -48,22 +46,20 @@ These cover stats, DMD formatting, queued playback, native VLC looping and shutd
 
 To also check startup keyboard focus, cabinet-button navigation through the native window input route, and the topmost handling around a launched program, run `dotnet run --project tests/LauncherChecks -- --window-focus`. This briefly opens small test windows without loading your cabinet configuration or launching VPX.
 
-To drive the real `ReturnToLauncher.exe` with injected keystrokes, run `dotnet run --project tests/LauncherChecks -- --return-hotkey`. It presses `F12` and `F12+Enter` on your keyboard and starts a stub in place of the launcher, so run it with nothing important focused.
-
 To publish a self-contained copy outside the repository:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\Publish-Launcher.ps1 -Destination C:\vPinball\Launcher
 ```
 
-Add `-SingleFile` to pack each program into one exe, and `-FrameworkDependent` to use an installed .NET 8 Desktop Runtime (`winget install Microsoft.DotNet.DesktopRuntime.8`) instead of bundling it. Approximate sizes:
+Add `-SingleFile` to pack the launcher into one exe, and `-FrameworkDependent` to use an installed .NET 8 Desktop Runtime (`winget install Microsoft.DotNet.DesktopRuntime.8`) instead of bundling it. Approximate sizes:
 
 | Options | Size |
 |---|---|
 | none (self-contained folder) | 203 MB |
-| `-SingleFile` (compressed; each exe carries its own .NET) | 179 MB |
-| `-FrameworkDependent` | 43 MB |
-| `-SingleFile -FrameworkDependent` | 43 MB |
+| `-SingleFile` (compressed) | 111 MB |
+| `-FrameworkDependent` | 44 MB |
+| `-SingleFile -FrameworkDependent` | 44 MB |
 
 The `libvlc` folder, `ScreenRecorderLib.dll` and `flipper.wav` always sit next to the launcher, because VLC loads its plugins from disk and ScreenRecorderLib can't load from inside a single-file exe. Only the VLC plugins needed for local preview files are shipped (see the list in `VirtualPinballLauncher.csproj`). If a preview format stops playing, add the missing plugin there.
 
@@ -83,7 +79,6 @@ Example:
   "RecordSeconds": 30,
   "RecordDelaySeconds": 10,
   "FfmpegPath": "ffmpeg",
-  "ReturnToLauncherHotkey": "F12+Enter",
   "KeyBindings": [ ... ]
 }
 ```
@@ -100,7 +95,6 @@ See `VirtualPinballLauncher/example_config.json` for the full file.
 - `RecordSeconds`: Length of recorded preview videos.
 - `RecordDelaySeconds`: Delay after launching a table before recording starts.
 - `FfmpegPath`: `ffmpeg` executable name or full path.
-- `ReturnToLauncherHotkey`: Chord the optional desktop helper waits for. Default `F12+Enter`.
 - `KeyBindings`: Every key the launcher reacts to. See Key Bindings below.
 
 Relative `Command` paths are resolved next to the launcher executable. Fields this version does not know about are preserved when the file is rewritten. A `config.json` written by an older launcher gets the new sections added with their defaults on first load so they are visible and editable.
@@ -177,12 +171,6 @@ Mouse wheel navigation is always on.
 - `ShutdownPc`, `RestartPc`: power off or restart the PC. Work while a table is running.
 
 While a table or a `Run` program is on screen, only `KillTable`, the volume actions, and the power actions respond.
-
-## Starting the launcher with a hotkey
-
-`ReturnToLauncher.exe` is an optional windowless helper built next to the launcher. It waits for `ReturnToLauncherHotkey` (default `F12+Enter`), then starts the launcher, or brings it to the front if it is already running. It reads the same `config.json`, only swallows the chorded key, so a bare `F12` still reaches whatever is focused, and needs nothing else installed.
-
-To have the hotkey available from logon, put a shortcut to `ReturnToLauncher.exe` in the Startup folder (`shell:startup`). Only one copy runs at a time. Pass `--once` to have it exit after the first launch, and `--config` or `--launcher` to point it at files elsewhere.
 
 ## Sorting and Stats
 

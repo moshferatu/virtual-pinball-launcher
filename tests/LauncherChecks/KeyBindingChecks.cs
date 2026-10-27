@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Input;
 using VirtualPinballLauncher;
 using VirtualPinballLauncher.Input;
@@ -50,7 +51,6 @@ internal static class KeyBindingChecks
             && tetris.Source.Command!.EndsWith("TetrisOLED.exe"), "F12+Escape runs a program while Escape alone exits");
         Check(map.TryGetChord(new KeyChord(Key.F12, Key.D5), out var alien) && alien.Source.WaitForProcess == null,
             "Alien Crush waits on its own process tree rather than a named process");
-        Check(!map.TryGetChord(new KeyChord(Key.F12, Key.Enter), out _), "F12+Enter is left to the ReturnToLauncher companion");
         Check(map.Chords.Count == 5, "All five chords are registered");
     }
 
@@ -171,7 +171,7 @@ internal static class KeyBindingChecks
         var json = Config.Serialize(new Config());
         Check(json.Contains("\"Keys\": \"Escape\"") && json.Contains("\"Keys\": ["), "Lone keys serialize as strings and lists as arrays");
         Check(!json.Contains("SingleInstance") && !json.Contains("WaitForProcess"), "Unused optional fields are omitted from config.json");
-        Check(json.Contains("\"ReturnToLauncherHotkey\": \"F12+Enter\""), "The return hotkey is written with its default");
+        Check(!json.Contains("ReturnToLauncherHotkey"), "The removed return hotkey setting is not written");
 
         var reloaded = Config.Deserialize(json);
         Check(reloaded.KeyBindings.Count == new Config().KeyBindings.Count
@@ -199,6 +199,17 @@ internal static class KeyBindingChecks
         Check(Config.Serialize(custom).Contains("\"FfmpegPath\": \"ffmpeg\""), "Unknown fields are preserved when config.json is rewritten");
         Check(Config.Deserialize("{ \"TablesDirectory\": \"D:\\\\Tables\" }").KeyBindings.Count == new Config().KeyBindings.Count,
             "A config without KeyBindings keeps the defaults");
+
+        var oldFile = Path.Combine(Path.GetTempPath(), "LauncherChecks-config-" + Guid.NewGuid() + ".json");
+        try
+        {
+            File.WriteAllText(oldFile, "{ \"FfmpegPath\": \"ffmpeg\", \"ReturnToLauncherHotkey\": \"F12+Enter\", \"KeyBindings\": [] }");
+            Config.LoadAsync(oldFile).GetAwaiter().GetResult();
+            var rewritten = File.ReadAllText(oldFile);
+            Check(!rewritten.Contains("ReturnToLauncherHotkey") && rewritten.Contains("\"FfmpegPath\": \"ffmpeg\""),
+                "Loading an old config.json drops the removed return hotkey and keeps other fields");
+        }
+        finally { File.Delete(oldFile); }
     }
 
     private static void Check(bool condition, string description)

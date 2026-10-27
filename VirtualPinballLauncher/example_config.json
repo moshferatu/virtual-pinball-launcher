@@ -7,7 +7,6 @@
   "RecordSeconds": 30,
   "RecordDelaySeconds": 10,
   "FfmpegPath": "ffmpeg",
-  "ReturnToLauncherHotkey": "F12+Enter",
   "KeyBindings": [
     { "Keys": ["Down", "Right", "RightShift", "PageDown"], "Action": "NextTable" },
     { "Keys": ["Up", "Left", "LeftShift", "PageUp"], "Action": "PreviousTable" },

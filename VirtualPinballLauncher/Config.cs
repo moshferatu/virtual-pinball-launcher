@@ -27,9 +27,6 @@ public sealed class Config
     public int RecordSeconds { get; set; } = 30;
     public int RecordDelaySeconds { get; set; } = 10;
 
-    /// <summary>Chord that the optional ReturnToLauncher helper waits for on the desktop to start or activate the launcher.</summary>
-    public string ReturnToLauncherHotkey { get; set; } = "F12+Enter";
-
     /// <summary>Every key the launcher reacts to, including global chords.</summary>
     public List<KeyBinding> KeyBindings { get; set; } = DefaultKeyBindings();
 
@@ -66,8 +63,11 @@ public sealed class Config
         var loaded = JsonSerializer.Deserialize<Config>(json, SerializerOptions) ?? new Config();
 
         // Older files predate the key binding list. Write the defaults back so the
-        // section is visible and editable without hand-typing it.
-        if (!HasProperty(json, nameof(KeyBindings)) || !HasProperty(json, nameof(ReturnToLauncherHotkey)))
+        // section is visible and editable without hand-typing it. Settings this
+        // launcher no longer has are dropped at the same time.
+        var removed = loaded.AdditionalFields?.Keys.Where(IsRemovedField).ToList() ?? new();
+        foreach (var name in removed) loaded.AdditionalFields!.Remove(name);
+        if (!HasProperty(json, nameof(KeyBindings)) || removed.Count > 0)
             await SaveAsync(path, loaded);
 
         return loaded;
@@ -80,6 +80,9 @@ public sealed class Config
 
     public static Config Deserialize(string json) =>
         JsonSerializer.Deserialize<Config>(json, SerializerOptions) ?? new Config();
+
+    private static bool IsRemovedField(string name) =>
+        name.Equals("ReturnToLauncherHotkey", StringComparison.OrdinalIgnoreCase);
 
     private static bool HasProperty(string json, string name)
     {

@@ -63,7 +63,6 @@ internal static class Program
             CheckWindowShutdown();
             if (args.Contains("--window-focus")) WindowFocusChecks.Run(directory);
             if (args.Contains("--window-focus") || args.Contains("--topmost")) TopmostChecks.Run();
-            if (args.Contains("--return-hotkey")) ReturnHotkeyChecks.RunAsync(directory).GetAwaiter().GetResult();
             Console.WriteLine("All launcher regression checks passed.");
         }
         finally

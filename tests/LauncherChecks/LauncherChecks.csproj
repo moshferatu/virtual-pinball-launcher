@@ -9,6 +9,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../VirtualPinballLauncher/VirtualPinballLauncher.csproj" />
-    <ProjectReference Include="../../ReturnToLauncher/ReturnToLauncher.csproj" />
   </ItemGroup>
 </Project>

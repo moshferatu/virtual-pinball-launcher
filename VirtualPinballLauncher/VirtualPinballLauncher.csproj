@@ -8,8 +8,6 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Publish-Launcher.ps1 publishes ReturnToLauncher on its own with matching settings. -->
-    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
     <!-- Keep line numbers in logged stack traces without shipping separate .pdb or .xml files. -->
     <DebugType>embedded</DebugType>
     <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
@@ -40,9 +38,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\VirtualPinballLauncher.Input\VirtualPinballLauncher.Input.csproj" />
-    <!-- Builds the optional desktop hotkey helper next to the launcher. A single-file publish leaves it out
-         so it isn't packed inside the launcher; Publish-Launcher.ps1 publishes it separately. -->
-    <ProjectReference Include="..\ReturnToLauncher\ReturnToLauncher.csproj" Condition="'$(PublishSingleFile)' != 'true'" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="flipper.wav">

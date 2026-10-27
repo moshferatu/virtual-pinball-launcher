@@ -38,7 +38,7 @@ public partial class App : System.Windows.Application
 
         LauncherLog.Install();
 
-        // One launcher per session: a second copy (for example from the ReturnToLauncher hotkey) leaves quietly.
+        // One launcher per session: a second copy leaves quietly.
         instanceMutex = new Mutex(true, @"Local\VirtualPinballLauncher.Instance", out var isFirstInstance);
         if (!isFirstInstance)
         {
