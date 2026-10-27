@@ -22,7 +22,7 @@ public sealed class Config
     public string TablesDirectory { get; set; } = "";
     /// <summary>Holds the Playfield and Backglass preview video folders.</summary>
     public string PreviewsDirectory { get; set; } = "";
-    public string VpxExePath { get; set; } = @"";
+    public string VpxExePath { get; set; } = "";
     public string VideoExtension { get; set; } = ".mp4";
     public int RecordSeconds { get; set; } = 30;
     public int RecordDelaySeconds { get; set; } = 10;
@@ -76,16 +76,15 @@ public sealed class Config
         }
 
         var json = await File.ReadAllTextAsync(path);
-        var loaded = JsonSerializer.Deserialize<Config>(json, SerializerOptions) ?? new Config();
-
-        loaded.Appearance ??= new Appearance();
+        var loaded = Deserialize(json);
 
         // Older files predate the key binding list and the appearance section. Write
         // the defaults back so those sections are visible and editable without
         // hand-typing them. Settings this launcher no longer has are dropped at the same time.
         var removed = loaded.AdditionalFields?.Keys.Where(IsRemovedField).ToList() ?? new();
         foreach (var name in removed) loaded.AdditionalFields!.Remove(name);
-        if (!HasProperty(json, nameof(KeyBindings)) || !HasProperty(json, nameof(Appearance)) || removed.Count > 0)
+        var present = TopLevelPropertyNames(json);
+        if (!present.Contains(nameof(KeyBindings)) || !present.Contains(nameof(Appearance)) || removed.Count > 0)
             await SaveAsync(path, loaded);
 
         return loaded;
@@ -109,16 +108,17 @@ public sealed class Config
     private static bool IsRemovedField(string name) =>
         RemovedFields.Contains(name, StringComparer.OrdinalIgnoreCase);
 
-    private static bool HasProperty(string json, string name)
+    private static HashSet<string> TopLevelPropertyNames(string json)
     {
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {
             CommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true
         });
-        if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
-        foreach (var property in document.RootElement.EnumerateObject())
-            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (document.RootElement.ValueKind == JsonValueKind.Object)
+            foreach (var property in document.RootElement.EnumerateObject())
+                names.Add(property.Name);
+        return names;
     }
 }

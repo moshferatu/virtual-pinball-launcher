@@ -28,7 +28,7 @@ public partial class DmdWindow : Window
         TimesPlayedValue.Text = stats?.TimesPlayed.ToString(CultureInfo.CurrentCulture) ?? "";
         TotalTimePlayedValue.Text = stats == null ? "" : FormatDuration(stats.TotalTimeSpentPlaying);
         LastPlayedValue.Text = stats == null ? "" :
-            stats.LastDatePlayed?.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture) ?? "Never";
+            stats.LastDatePlayed?.ToString(TableStats.LastDateFormat, CultureInfo.InvariantCulture) ?? "Never";
     }
 
     private static string FormatDuration(TimeSpan duration)

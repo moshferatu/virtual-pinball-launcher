@@ -18,7 +18,7 @@ public static class Recorder
         if (string.IsNullOrWhiteSpace(config.PreviewsDirectory))
             throw new ArgumentException("PreviewsDirectory is not set in config.json.", nameof(config.PreviewsDirectory));
 
-        string backglassDeviceName = ScreenSize.GetBackglassMonitorDeviceName()
+        string backglassDeviceName = WindowUtils.ScreenAt(WindowUtils.BackglassMonitor)?.DeviceName
             ?? throw new InvalidOperationException("No backglass monitor could be detected.");
 
         Directory.CreateDirectory(config.PlayfieldPreviewsDirectory);

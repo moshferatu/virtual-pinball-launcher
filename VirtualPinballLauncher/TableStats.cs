@@ -11,7 +11,7 @@ public sealed class TableStats
 {
     private const string TableStatsCsvFileName = "table-stats.csv";
     private const string TableStatsHeader = "Table Name,Times Played,Total Time Spent Playing,Last Date Played";
-    private const string LastDateFormat = "MMMM d, yyyy";
+    internal const string LastDateFormat = "MMMM d, yyyy";
 
     private Dictionary<string, TableStatsEntry>? cachedTableStats;
     private string? cachedTableStatsCsvPath;

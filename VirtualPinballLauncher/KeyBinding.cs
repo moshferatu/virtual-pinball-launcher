@@ -103,7 +103,6 @@ public sealed class KeyBindingMap
 
     public IReadOnlyList<string> Errors => errors;
     public IReadOnlyCollection<KeyChord> Chords => chords.Keys;
-    public IEnumerable<ResolvedBinding> Bindings => singles.Values.Concat(chords.Values);
 
     public bool TryGetSingle(Key key, out ResolvedBinding binding) => singles.TryGetValue(key, out binding!);
     public bool TryGetChord(KeyChord chord, out ResolvedBinding binding) => chords.TryGetValue(chord, out binding!);

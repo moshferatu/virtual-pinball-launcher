@@ -15,7 +15,6 @@ using System.Windows.Threading;
 using VirtualPinballLauncher.Input;
 using MessageBox = System.Windows.MessageBox;
 using Cursors = System.Windows.Input.Cursors;
-using Forms = System.Windows.Forms;
 
 namespace VirtualPinballLauncher;
 
@@ -43,6 +42,13 @@ public partial class MainWindow : Window
     {
         LauncherAction.VolumeUp, LauncherAction.VolumeDown, LauncherAction.KillTable,
         LauncherAction.ShutdownPc, LauncherAction.RestartPc
+    };
+
+    // Actions that act on the selected table, so they need at least one.
+    private static readonly HashSet<LauncherAction> ActionsNeedingTables = new()
+    {
+        LauncherAction.NextTable, LauncherAction.PreviousTable, LauncherAction.LaunchTable,
+        LauncherAction.RandomTable, LauncherAction.ToggleSort, LauncherAction.RecordPreview
     };
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -183,11 +189,11 @@ public partial class MainWindow : Window
         Activated += (_, __) => ForceHideCursor();
 
         dmdWindow = new DmdWindow();
-        dmdWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 1);
+        dmdWindow.MoveToMonitor(WindowUtils.DmdMonitor);
         dmdWindow.Show();
 
         backglassWindow = new BackglassWindow(previews.Backglass);
-        backglassWindow.MoveToMonitor(Forms.Screen.AllScreens.Length - 2);
+        backglassWindow.MoveToMonitor(WindowUtils.BackglassMonitor);
         backglassWindow.Show();
 
         volumeOverlayWindow = new VolumeOverlayWindow();
@@ -269,33 +275,30 @@ public partial class MainWindow : Window
         if (isClosed) return;
         // Any key that reaches this window passed the global hook first, unless the hook is gone.
         bindingHost?.NoteWindowKeyEvent();
-        if (launchInProgress) return;
         if (!keyBindings.TryGetSingle(e.Key, out var binding)) return;
 
         // While a chord modifier is held, its partner keys belong to the chord, not to the launcher.
         if (bindingHost?.HookActive == true && (bindingHost.IsModifierHeld || keyBindings.IsModifier(e.Key))) return;
 
-        if (tableList.Count == 0 && binding.Action != LauncherAction.Exit) return;
-        await ExecuteAsync(binding, e.IsRepeat);
+        if (CanRun(binding.Action)) await ExecuteAsync(binding, e.IsRepeat);
     }
 
     private async Task HandleModifierTapAsync(Key key)
     {
-        if (isClosed || launchInProgress || !IsActive) return;
-        if (tableList.Count == 0) return;
-        if (keyBindings.TryGetSingle(key, out var binding))
+        if (isClosed || !IsActive) return;
+        if (keyBindings.TryGetSingle(key, out var binding) && CanRun(binding.Action))
             await ExecuteAsync(binding);
     }
 
     private async Task HandleChordAsync(ResolvedBinding binding)
     {
-        if (isClosed) return;
-        if (launchInProgress && !ActionsAllowedDuringLaunch.Contains(binding.Action)) return;
-        if (tableList.Count == 0 && binding.Action is LauncherAction.NextTable or LauncherAction.PreviousTable
-            or LauncherAction.LaunchTable or LauncherAction.RandomTable or LauncherAction.ToggleSort or LauncherAction.RecordPreview)
-            return;
-        await ExecuteAsync(binding);
+        if (!isClosed && CanRun(binding.Action)) await ExecuteAsync(binding);
     }
+
+    /// <summary>The one rule for every key path: what may run during a launch, and what needs a table.</summary>
+    private bool CanRun(LauncherAction action) =>
+        (!launchInProgress || ActionsAllowedDuringLaunch.Contains(action))
+        && (tableList.Count > 0 || !ActionsNeedingTables.Contains(action));
 
     private async Task ExecuteAsync(ResolvedBinding binding, bool isRepeat = false)
     {
@@ -320,7 +323,7 @@ public partial class MainWindow : Window
                 await RecordSelectedPreviewAsync();
                 break;
             case LauncherAction.Exit:
-                if (!isRepeat) await ExitAsync();
+                if (!isRepeat) Close();
                 break;
             case LauncherAction.Run:
                 await RunProgramAsync(binding.Source);
@@ -345,12 +348,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private Task ExitAsync()
-    {
-        if (!isClosed) Close();
-        return Task.CompletedTask;
-    }
-
     private void KillTable()
     {
         if (config == null || string.IsNullOrWhiteSpace(config.VpxExePath)) return;
@@ -364,8 +361,10 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Sorts by the current mode and keeps the same table selected.</summary>
     private void SortTableList()
     {
+        var selected = tableIndex < tableList.Count ? tableList[tableIndex] : null;
         if (sortByPopularity)
         {
             var allStats = tableStats.GetAllTableStats(config.TablesDirectory);
@@ -378,19 +377,15 @@ public partial class MainWindow : Window
         {
             tableList = tableList.OrderBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
         }
+        tableIndex = selected == null ? 0 : Math.Max(0, tableList.IndexOf(selected));
     }
 
     private void ToggleSortMode()
     {
         if (isClosed || launchInProgress || tableList.Count == 0) return;
 
-        var currentTableName = tableList[tableIndex].DisplayName;
         sortByPopularity = !sortByPopularity;
         SortTableList();
-
-        tableIndex = tableList.FindIndex(t => string.Equals(t.DisplayName, currentTableName, StringComparison.OrdinalIgnoreCase));
-        if (tableIndex < 0) tableIndex = 0;
-
         _ = RefreshPreviewAsync();
     }
 
@@ -534,9 +529,7 @@ public partial class MainWindow : Window
             WorkingDirectory = Path.GetDirectoryName(config.VpxExePath) ?? Environment.CurrentDirectory
         };
 
-        launchInProgress = true;
-
-        try
+        await RunExclusiveAsync("Launch Error", async () =>
         {
             // Finish any pending navigation refresh before handing off to VPX.
             // Keep both previews playing underneath it so returning needs no reload.
@@ -565,27 +558,35 @@ public partial class MainWindow : Window
             try
             {
                 tableStats.UpdateTableStatsAfterPlay(config.TablesDirectory, table.DisplayName, stopwatch.Elapsed);
-                if (sortByPopularity)
-                {
-                    SortTableList();
-                    tableIndex = Math.Max(0, tableList.FindIndex(t =>
-                        string.Equals(t.DisplayName, table.DisplayName, StringComparison.OrdinalIgnoreCase)));
-                }
+                if (sortByPopularity) SortTableList();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.ToString(), "CSV Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        });
+    }
+
+    /// <summary>
+    /// Runs work that takes the screen away from the launcher (a table, another program,
+    /// or the recorder), then brings the launcher back whether or not it worked.
+    /// </summary>
+    private async Task RunExclusiveAsync(string errorTitle, Func<Task> work, bool reloadPreviews = false)
+    {
+        launchInProgress = true;
+        try
+        {
+            await work();
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.ToString(), "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(ex.ToString(), errorTitle, MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             launchInProgress = false;
             RestoreWindows();
-            await RefreshPreviewAsync();
+            await RefreshPreviewAsync(force: reloadPreviews);
         }
     }
 
@@ -628,8 +629,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        launchInProgress = true;
-        try
+        await RunExclusiveAsync("Launch Error", async () =>
         {
             await RefreshPreviewAsync();
             if (isClosed) return;
@@ -637,17 +637,7 @@ public partial class MainWindow : Window
             WindowActivation.AllowAnyProcessToTakeForeground();
             SuspendWindows();
             await ExternalProgram.RunAsync(spec, () => Dispatcher.Invoke(OnExternalWindowActivated));
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.ToString(), "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            launchInProgress = false;
-            RestoreWindows();
-            await RefreshPreviewAsync();
-        }
+        });
     }
 
     private async Task RecordSelectedPreviewAsync()
@@ -664,25 +654,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        launchInProgress = true;
-        try
+        // The recorder replaced the videos, so reload them even though the table is the same.
+        await RunExclusiveAsync("Record Error", async () =>
         {
             // Release preview file handles before the recorder replaces the videos.
             SuspendWindows();
             await StopPreviewsAsync();
             if (isClosed) return;
             await RunRecordProcessAsync(self, $"--record \"{table.VpxPath}\"");
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.ToString(), "Record Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            launchInProgress = false;
-            RestoreWindows();
-            await RefreshPreviewAsync(force: true);
-        }
+        }, reloadPreviews: true);
     }
 
     private static async Task RunRecordProcessAsync(string exePath, string arguments)
