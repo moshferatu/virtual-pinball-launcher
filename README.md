@@ -19,15 +19,6 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 - Visual Pinball X
 - `ffmpeg` available on `PATH`, or configured with an absolute path in `config.json` if you want recording support
 
-## Project Layout
-
-- `VirtualPinballLauncher/` contains the WPF application.
-- `VirtualPinballLauncher/example_config.json` is the sample configuration.
-- `VirtualPinballLauncher/resources/` holds the DMD font and the flipper sound.
-- `tests/LauncherChecks/` holds the regression checks.
-- `tools/Publish-Launcher.ps1` publishes the launcher into one folder.
-- `virtual-pinball-launcher.sln` is the solution file.
-
 ## Build
 
 ```bash
