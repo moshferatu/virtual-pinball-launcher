@@ -25,34 +25,13 @@ Windows launcher for Visual Pinball X tables with looping playfield previews, op
 dotnet build
 ```
 
-The app targets `net8.0-windows` and uses WPF.
-
-Run the regression checks with:
-
-```bash
-dotnet run --project tests/LauncherChecks
-```
-
-These cover stats, DMD formatting, queued playback, native VLC looping and shutdown, preview-file replacement failures, key binding parsing, chord handling, config round-trips, and the process-tree wait used by the Run action (which briefly starts hidden `cmd.exe` processes). Playback checks use silent audio with dummy outputs; they do not launch VPX or record the desktop.
-
-To also check startup keyboard focus, cabinet-button navigation through the native window input route, and the topmost handling around a launched program, run `dotnet run --project tests/LauncherChecks -- --window-focus`. This briefly opens small test windows without loading your cabinet configuration or launching VPX.
-
 To publish a self-contained copy outside the repository:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\Publish-Launcher.ps1 -Destination C:\vPinball\Launcher
 ```
 
-Add `-SingleFile` to pack the launcher into one exe, and `-FrameworkDependent` to use an installed .NET 8 Desktop Runtime (`winget install Microsoft.DotNet.DesktopRuntime.8`) instead of bundling it. Approximate sizes:
-
-| Options | Size |
-|---|---|
-| none (self-contained folder) | 203 MB |
-| `-SingleFile` (compressed) | 111 MB |
-| `-FrameworkDependent` | 44 MB |
-| `-SingleFile -FrameworkDependent` | 44 MB |
-
-The `libvlc` folder, `ScreenRecorderLib.dll` and `flipper.wav` always sit next to the launcher, because VLC loads its plugins from disk and ScreenRecorderLib can't load from inside a single-file exe. Only the VLC plugins needed for local preview files are shipped (see the list in `VirtualPinballLauncher.csproj`). If a preview format stops playing, add the missing plugin there.
+Add `-SingleFile` to pack the launcher into one exe, and `-FrameworkDependent` to use an installed .NET 8 Desktop Runtime (`winget install Microsoft.DotNet.DesktopRuntime.8`) instead of bundling it.
 
 ## Configuration
 
